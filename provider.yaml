@@ -1,0 +1,22 @@
+---
+package-name: pixi-airflow
+name: Pixi
+description: |
+  Run Python callables inside `Pixi <https://pixi.sh>`__ environments.
+
+versions:
+  - 0.1.0
+
+integrations:
+  - integration-name: Pixi
+    external-doc-url: https://pixi.sh
+    tags: [software]
+
+operators:
+  - integration-name: Pixi
+    python-modules:
+      - pixi_airflow.operators.pixi
+
+task-decorators:
+  - name: pixi
+    class-name: pixi_airflow.decorators.pixi.pixi_task
