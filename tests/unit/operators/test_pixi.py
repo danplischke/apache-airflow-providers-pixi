@@ -6,11 +6,18 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-from airflow_providers_pixi.operators.pixi import (
+
+from pixi_airflow.operators.pixi import (
     PixiOperator,
     _build_pixi_toml,
     _resolve_callable_ref,
 )
+
+
+def test_package_exports_operator() -> None:
+    import pixi_airflow
+
+    assert pixi_airflow.PixiOperator is PixiOperator
 
 
 def test_resolve_callable_ref_string_valid() -> None:
@@ -32,7 +39,7 @@ def test_resolve_callable_ref_callable() -> None:
     ref = _resolve_callable_ref(my_func)
     assert ":" in ref
     assert ref.endswith(":my_func")
-    assert ref.split(":")[0].endswith("test_pixi_operator") or ref.startswith("__main__:")
+    assert ref.split(":")[0].endswith("test_pixi") or ref.startswith("__main__:")
 
 
 def test_build_pixi_toml_minimal() -> None:
@@ -150,7 +157,7 @@ def test_operator_command_building_with_environment() -> None:
     assert op.environment == "cuda"
 
 
-@patch("airflow_providers_pixi.operators.pixi.subprocess.run")
+@patch("pixi_airflow.operators.pixi.subprocess.run")
 def test_operator_execute_mock_subprocess(mock_run: MagicMock) -> None:
     mock_run.return_value = MagicMock(returncode=0, stdout='other\n{"x": 1}', stderr="")
     # Execute needs inline manifest (or real project path); use inline for test
@@ -166,8 +173,8 @@ def test_operator_execute_mock_subprocess(mock_run: MagicMock) -> None:
     )
     ctx = {"ti": MagicMock()}
     with (
-        patch("airflow_providers_pixi.operators.pixi.shutil.which", return_value="/usr/bin/pixi"),
-        patch("airflow_providers_pixi.operators.pixi.subprocess.run") as m_run,
+        patch("pixi_airflow.operators.pixi.shutil.which", return_value="/usr/bin/pixi"),
+        patch("pixi_airflow.operators.pixi.subprocess.run") as m_run,
     ):
         m_run.return_value = MagicMock(
             returncode=0,
@@ -182,7 +189,7 @@ def test_operator_execute_mock_subprocess(mock_run: MagicMock) -> None:
     assert call_kw["value"] == ["hello"]
 
 
-@patch("airflow_providers_pixi.operators.pixi.subprocess.run")
+@patch("pixi_airflow.operators.pixi.subprocess.run")
 def test_operator_execute_subprocess_failure(mock_run: MagicMock) -> None:
     from airflow.exceptions import AirflowException
 
@@ -196,7 +203,7 @@ def test_operator_execute_subprocess_failure(mock_run: MagicMock) -> None:
         auto_install_pixi=False,
     )
     with (
-        patch("airflow_providers_pixi.operators.pixi.shutil.which", return_value="/usr/bin/pixi"),
+        patch("pixi_airflow.operators.pixi.shutil.which", return_value="/usr/bin/pixi"),
         pytest.raises(AirflowException, match="Pixi run failed"),
     ):
         op.execute({"ti": MagicMock()})
@@ -220,15 +227,15 @@ def test_operator_cache_dir_variables_in_env() -> None:
     )
     ctx = {"ti": MagicMock()}
     with (
-        patch("airflow_providers_pixi.operators.pixi.shutil.which", return_value="/usr/bin/pixi"),
-        patch("airflow_providers_pixi.operators.pixi.Variable.get") as m_get,
+        patch("pixi_airflow.operators.pixi.shutil.which", return_value="/usr/bin/pixi"),
+        patch("pixi_airflow.operators.pixi.Variable.get") as m_get,
     ):
         m_get.side_effect = lambda key, default_var=None: {
             "pixi_cache_dir": "/shared/pixi_cache",
             "uv_cache_dir": "/shared/uv_cache",
             "pip_cache_dir": "/shared/pip_cache",
         }.get(key, default_var)
-        with patch("airflow_providers_pixi.operators.pixi.subprocess.run") as m_run:
+        with patch("pixi_airflow.operators.pixi.subprocess.run") as m_run:
             m_run.return_value = MagicMock(returncode=0, stdout='"x"', stderr="")
             op.execute(ctx)
     call_kw = m_run.call_args[1]
@@ -240,9 +247,9 @@ def test_operator_cache_dir_variables_in_env() -> None:
 
 def test_ensure_pixi_available_uses_which_when_found() -> None:
     """When pixi is on PATH, _ensure_pixi_available returns it without installing."""
-    from airflow_providers_pixi.operators.pixi import _ensure_pixi_available
+    from pixi_airflow.operators.pixi import _ensure_pixi_available
 
-    with patch("airflow_providers_pixi.operators.pixi.shutil.which") as m_which:
+    with patch("pixi_airflow.operators.pixi.shutil.which") as m_which:
         m_which.return_value = "/usr/local/bin/pixi"
         path = _ensure_pixi_available("pixi", auto_install=True)
     assert path == "/usr/local/bin/pixi"
@@ -252,8 +259,11 @@ def test_ensure_pixi_available_uses_which_when_found() -> None:
 def test_ensure_pixi_available_raises_when_not_found_and_no_auto_install() -> None:
     """When pixi not on PATH and auto_install=False, raises AirflowException."""
     from airflow.exceptions import AirflowException
-    from airflow_providers_pixi.operators.pixi import _ensure_pixi_available
 
-    with patch("airflow_providers_pixi.operators.pixi.shutil.which", return_value=None):
-        with pytest.raises(AirflowException, match="not found on PATH"):
-            _ensure_pixi_available("pixi", auto_install=False)
+    from pixi_airflow.operators.pixi import _ensure_pixi_available
+
+    with (
+        patch("pixi_airflow.operators.pixi.shutil.which", return_value=None),
+        pytest.raises(AirflowException, match="not found on PATH"),
+    ):
+        _ensure_pixi_available("pixi", auto_install=False)

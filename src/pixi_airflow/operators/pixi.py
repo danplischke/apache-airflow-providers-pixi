@@ -1,6 +1,4 @@
-"""
-PixiOperator and @task.pixi: run Python callables inside a Pixi environment.
-"""
+"""Run a Python callable inside a Pixi environment."""
 
 from __future__ import annotations
 
@@ -12,14 +10,11 @@ import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from airflow.exceptions import AirflowException
 from airflow.models.variable import Variable
 from airflow.sdk import BaseOperator
-
-if TYPE_CHECKING:
-    from airflow.sdk.bases.decorator import TaskDecorator
 
 # Runner script: reads JSON path from env AIRFLOW_PIXI_ARGS_FILE, loads module/callable/args/kwargs,
 # runs callable, prints result as JSON on last line (single line) for operator to parse.
@@ -68,11 +63,10 @@ def _ensure_pixi_available(pixi_binary: str, auto_install: bool = True) -> str:
         capture_output=True,
         text=True,
         timeout=300,
+        check=False,
     )
     if proc.returncode != 0:
-        raise AirflowException(
-            f"Pixi auto-install failed (exit {proc.returncode}): {proc.stderr or proc.stdout}"
-        )
+        raise AirflowException(f"Pixi auto-install failed (exit {proc.returncode}): {proc.stderr or proc.stdout}")
     pixi_path = install_dir / "pixi.exe" if sys.platform == "win32" else install_dir / "pixi"
     if not pixi_path.is_file():
         raise AirflowException(f"Pixi install completed but binary not found at {pixi_path}")
@@ -307,9 +301,7 @@ class PixiOperator(BaseOperator):
                 args_file = f.name
 
             try:
-                pixi_path = _ensure_pixi_available(
-                    self.pixi_binary, auto_install=self.auto_install_pixi
-                )
+                pixi_path = _ensure_pixi_available(self.pixi_binary, auto_install=self.auto_install_pixi)
                 cmd = [
                     pixi_path,
                     "run",
@@ -344,12 +336,11 @@ class PixiOperator(BaseOperator):
                     capture_output=True,
                     text=True,
                     timeout=3600,
+                    check=False,
                 )
 
                 if proc.returncode != 0:
-                    raise AirflowException(
-                        f"Pixi run failed (exit {proc.returncode}): {proc.stderr or proc.stdout}"
-                    )
+                    raise AirflowException(f"Pixi run failed (exit {proc.returncode}): {proc.stderr or proc.stdout}")
 
                 # Last line of stdout is JSON result
                 out = (proc.stdout or "").strip()
@@ -369,39 +360,4 @@ class PixiOperator(BaseOperator):
                     pass
         finally:
             if temp_dir and self.cleanup_temp_manifest:
-                import shutil
-
-                try:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                except Exception:
-                    pass
-
-
-def _get_decorated_operator_class() -> type:
-    """Lazy import to avoid circular import and ensure decorator base is available."""
-    from airflow.sdk.bases.decorator import DecoratedOperator
-
-    class PixiDecoratedOperator(PixiOperator, DecoratedOperator):  # type: ignore[misc]
-        custom_operator_name = "@task.pixi"
-
-    return PixiDecoratedOperator
-
-
-def pixi_task(
-    python_callable: Callable[..., Any] | None = None,
-    multiple_outputs: bool | None = None,
-    **kwargs: Any,
-) -> TaskDecorator:
-    """TaskFlow decorator that runs the callable in a Pixi environment. Use as @task.pixi(...)."""
-    from airflow.sdk.bases.decorator import task_decorator_factory
-
-    return task_decorator_factory(
-        python_callable=python_callable,
-        multiple_outputs=multiple_outputs,
-        decorated_operator_class=_get_decorated_operator_class(),
-        **kwargs,
-    )
-
-
-# Expose for get_provider_info and imports
-PixiDecoratedOperator = _get_decorated_operator_class()
+                shutil.rmtree(temp_dir, ignore_errors=True)

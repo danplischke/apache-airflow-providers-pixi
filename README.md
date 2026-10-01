@@ -1,128 +1,140 @@
-# apache-airflow-providers-pixi
+# pixi-airflow
 
-Apache Airflow 3 provider to run Python callables inside [Pixi](https://github.com/prefix-dev/pixi)-managed environments. Provides **PixiOperator** and the **@task.pixi** TaskFlow decorator.
-
-## Requirements
-
-- **Apache Airflow 3.x**
-- **Pixi CLI** on `PATH` where workers run (install from [pixi.sh](https://pixi.sh) or `brew install pixi`). If Pixi is not found, the operator can auto-install it via the official install script (`auto_install_pixi=True`, default).
+Apache Airflow 3 provider to run Python callables inside [Pixi](https://pixi.sh)-managed
+environments: `PixiOperator` and the `@task.pixi` TaskFlow decorator.
 
 ## Installation
 
 ```bash
-pip install apache-airflow-providers-pixi
-# or from source
-pip install -e /path/to/pixi_operator
+pip install pixi-airflow
 ```
+
+Requires `apache-airflow>=3.0` and the [Pixi CLI](https://pixi.sh) on the workers (for
+example `brew install pixi`). If Pixi is not on `PATH`, the operator installs it with the
+official install script unless you pass `auto_install_pixi=False`.
 
 ## Usage
 
-### Operator: PixiOperator
-
-Run a Python callable (by module path or reference) in a Pixi environment. You must specify the manifest in exactly one of these ways:
-
-1. **Project path:** directory containing `pixi.toml` or `pyproject.toml`
-2. **Toml file path:** path to a `pixi.toml` or `pyproject.toml` file
-3. **Inline:** pass dependencies and options in the same format as [pixi.toml](https://pixi.sh/dev/reference/pixi_manifest/) (operator writes a temporary manifest)
-
 ```python
-from airflow_providers_pixi.operators.pixi import PixiOperator
+from airflow.sdk import DAG
 
-# Existing Pixi project
-PixiOperator(
-    task_id="run_in_pixi",
-    pixi_project_path="/path/to/pixi/project",
-    python_callable="mymodule:my_func",
-    op_kwargs={"key": "value"},
-    environment="cuda",  # optional: select Pixi environment when manifest has multiple
-)
+from pixi_airflow import PixiOperator
 
-# Explicit toml path
-PixiOperator(
-    task_id="run_in_pixi",
-    pixi_toml_path="/repo/pixi.toml",
-    environment="test",
-    python_callable="mymodule:my_func",
-)
+with DAG("my_pipeline") as dag:
+    # existing Pixi project: a directory with pixi.toml or pyproject.toml
+    train = PixiOperator(
+        task_id="train",
+        pixi_project_path="/path/to/pixi/project",
+        python_callable="mymodule:train",
+        op_kwargs={"epochs": 3},
+        environment="cuda",  # optional: one of the manifest's environments
+    )
 
-# Inline dependencies (conda + PyPI, same options as pixi.toml)
-PixiOperator(
-    task_id="inline_env",
-    dependencies={"python": ">=3.10", "numpy": "*"},
-    pypi_dependencies={"pandas": ">=2.0"},
-    channels=["conda-forge"],
-    platforms=["linux-64", "osx-64"],
-    environment="default",
-    python_callable="mymodule:other_func",
-)
+    # explicit manifest file
+    evaluate = PixiOperator(
+        task_id="evaluate",
+        pixi_toml_path="/repo/pixi.toml",
+        environment="test",
+        python_callable="mymodule:evaluate",
+    )
+
+    # inline manifest, same options as pixi.toml; written to a temporary directory
+    report = PixiOperator(
+        task_id="report",
+        dependencies={"python": ">=3.10", "numpy": "*"},
+        pypi_dependencies={"pandas": ">=2.0"},
+        channels=["conda-forge"],
+        platforms=["linux-64", "osx-arm64"],
+        python_callable="mymodule:report",
+    )
+
+    train >> evaluate >> report
 ```
 
-### Decorator: @task.pixi
+Specify the manifest in exactly one way: `pixi_project_path` (directory), `pixi_toml_path`
+(file), or inline (`dependencies` / `pypi_dependencies`).
 
-After installing the provider, `@task.pixi` is registered on Airflow’s `task` object. Use it from `airflow.decorators`:
+`@task.pixi` is registered on Airflow's `task` object once the provider is installed. It
+accepts the same arguments as `PixiOperator`:
 
 ```python
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 
-@dag(...)
+from mypkg.jobs import train  # importable on the worker and inside the Pixi environment
+
+
+@dag
 def my_dag():
-    @task.pixi(pixi_project_path="/path/to/pixi/project", environment="cuda")
-    def run_in_pixi(x: int) -> int:
-        return x + 1
-
-    run_in_pixi(2)
+    task.pixi(pixi_project_path="/path/to/pixi/project", environment="cuda")(train)(epochs=3)
 ```
 
-Parameters (e.g. `pixi_project_path`, `pixi_toml_path`, `dependencies`, `pypi_dependencies`, `channels`, `platforms`, `environment`, `environments`, `feature`, etc.) are the same as for **PixiOperator**.
+How it works:
 
-## Manifest options (inline)
+- `python_callable` is resolved to `"module.path:name"` when the task is created. At run
+  time the operator calls `pixi run --manifest-path <project> python -c <runner>` with the
+  project directory as working directory, so modules in that directory are importable.
+- `op_args` / `op_kwargs` are written to a temporary JSON file that the runner reads, so
+  they must be JSON-serializable; anything else arrives as its `str()`.
+- The runner prints the return value as JSON on the last line of stdout; the operator
+  parses it and pushes it to XCom.
 
-When using inline manifest (no path), you can pass:
+## Operators and decorators
 
-- **Workspace:** `channels`, `platforms`, `name` (optional)
-- **Conda:** `dependencies` (dict or list of MatchSpecs)
-- **PyPI:** `pypi_dependencies`, optional `pypi_options`
-- **Multiple environments:** `environments` (dict), optional `feature` (dict of feature configs)
+| | |
+|---|---|
+| `PixiOperator(task_id, python_callable, op_args=None, op_kwargs=None, ...)` | runs the callable in a Pixi environment |
+| `@task.pixi(...)` | TaskFlow variant of `PixiOperator` |
 
-Same structure as [Pixi manifest](https://pixi.sh/dev/reference/pixi_manifest/).
+`python_callable` is a `"module.path:callable_name"` string or a callable, and must be
+importable inside the Pixi environment: its code lives in the project directory or is
+installed in the environment. For `@task.pixi` this means a function defined in the DAG
+file does not work, because Airflow imports DAG files under generated module names that
+do not exist inside the environment.
 
-## Environment parameter
+### Inline manifest options
 
-If your `pixi.toml` defines multiple environments (e.g. `[environments]` with `default`, `test`, `cuda`), set **environment** to the name to use. Omit for Pixi’s default.
+- **Workspace:** `channels` (default `["conda-forge"]`), `platforms` (default `linux-64`,
+  `osx-64`, `osx-arm64`, `win-64`), `name`
+- **Conda:** `dependencies` (dict, or list of MatchSpecs)
+- **PyPI:** `pypi_dependencies`, `pypi_options`
+- **Multiple environments:** `environments` (dict), `feature` (dict of feature configs)
 
-## Callable and arguments
+Same structure as the [Pixi manifest](https://pixi.sh/dev/reference/pixi_manifest/). The
+temporary directory is removed after the run unless `cleanup_temp_manifest=False`.
 
-- **python_callable:** Either a `"module.path:callable_name"` string or a callable (resolved to module:name at init). The callable must be **importable** in the Pixi environment (its code and dependencies live in or are installed in that environment).
-- **op_args** / **op_kwargs:** Passed to the callable; must be **JSON-serializable** (they are written to a temp file and read inside the Pixi process).
+### Environment
 
-Return value is pushed to XCom and available to downstream tasks.
+If the manifest defines several environments (for example `default`, `test` and `cuda`
+under `[environments]`), set `environment` to the one to use. Omit it for Pixi's default.
 
-## Auto-install Pixi
+### Auto-install Pixi
 
-By default, if the Pixi binary is not on `PATH`, the operator runs the [official install script](https://pixi.sh) (Unix: `curl | sh`, Windows: PowerShell `irm | iex`) and uses the installed binary (`~/.pixi/bin` on Unix, `%LOCALAPPDATA%\\pixi\\bin` on Windows). Set `auto_install_pixi=False` to disable and fail instead when Pixi is missing.
+If the Pixi binary (`pixi_binary`, default `pixi`) is not on `PATH`, the operator runs the
+[official install script](https://pixi.sh) (Unix: `curl | sh`, Windows: PowerShell
+`irm | iex`) and uses the installed binary (`~/.pixi/bin` on Unix,
+`%LOCALAPPDATA%\pixi\bin` on Windows). Pass `auto_install_pixi=False` to fail instead.
 
-## Cache directories (Airflow Variables)
+### Cache directories (Airflow Variables)
 
-You can point Pixi, uv, and pip at custom cache directories using Airflow Variables. Set the Variable names on the operator (or via default_args), then create the Variables in the Airflow UI or via `airflow variables set <name> <path>`.
+Point Pixi, uv and pip at shared cache directories through Airflow Variables. Set the
+Variable names on the operator (or via `default_args`), then create the Variables in the
+Airflow UI or with `airflow variables set <name> <path>`:
 
-| Operator parameter              | Env var set in subprocess | Typical Variable name   |
-|--------------------------------|---------------------------|-------------------------|
-| `pixi_cache_dir_variable`      | `PIXI_CACHE_DIR`         | e.g. `pixi_cache_dir`   |
-| `uv_cache_dir_variable`        | `UV_CACHE_DIR`           | e.g. `uv_cache_dir`     |
-| `pip_cache_dir_variable`       | `PIP_CACHE_DIR`          | e.g. `pip_cache_dir`    |
+| Operator parameter | Env var set in the subprocess | Typical Variable name |
+|---|---|---|
+| `pixi_cache_dir_variable` | `PIXI_CACHE_DIR` | `pixi_cache_dir` |
+| `uv_cache_dir_variable` | `UV_CACHE_DIR` | `uv_cache_dir` |
+| `pip_cache_dir_variable` | `PIP_CACHE_DIR` | `pip_cache_dir` |
 
-Example: set Airflow Variable `pixi_cache_dir` = `/shared/cache/pixi`, then use `PixiOperator(..., pixi_cache_dir_variable="pixi_cache_dir")`. The value is read at task runtime; if the Variable is missing, the env var is not set (tool defaults apply).
+The Variables are read at task run time; a missing Variable leaves the env var unset, so
+the tool's default applies.
 
-## Development
-
-Install dev deps: `pip install -e ".[dev]"`. Run checks:
+## Tests
 
 ```bash
-ruff check airflow_providers_pixi tests
-ruff format airflow_providers_pixi tests
-pytest tests/
-pyright airflow_providers_pixi tests
-mypy airflow_providers_pixi
+uv sync --group dev
+pytest tests/unit                                  # pixi mocked
+PIXI_INTEGRATION_TEST=1 pytest tests/integration   # real pixi on PATH, needs conda-forge access
 ```
 
 ## License
