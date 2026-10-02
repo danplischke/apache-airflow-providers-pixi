@@ -16,6 +16,8 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     permissions:
+      # CodeQL reads its own workflow run, which needs this in a private repository.
+      actions: read
       contents: read
       security-events: write
     strategy:
