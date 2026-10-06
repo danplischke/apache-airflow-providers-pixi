@@ -137,6 +137,46 @@ jobs:
           PIXI_INTEGRATION_TEST: "1"
         run: uv run --no-sync pytest tests/integration -v
 
+  system-test:
+    name: System Test (Airflow dag.test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      - name: Install pixi
+        env:
+          PIXI_VERSION: v0.81.0
+          PIXI_NO_PATH_UPDATE: "1"
+        run: |
+          curl -fsSL https://pixi.sh/install.sh | bash
+          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+
+      - name: Init Airflow DB
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+          AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system
+        run: uv run --no-sync airflow db migrate
+
+      - name: Run system tests
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+          AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system
+          PIXI_E2E_TEST: "1"
+        run: uv run --no-sync pytest tests/system -v
+
   package:
     name: Build & Check Package
     runs-on: ubuntu-latest

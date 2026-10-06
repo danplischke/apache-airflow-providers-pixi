@@ -158,6 +158,11 @@ the tool's default applies.
 uv sync --group dev
 pytest tests/unit                                  # a fake pixi runs the command with this Python
 PIXI_INTEGRATION_TEST=1 pytest tests/integration   # real pixi on PATH, needs conda-forge access
+
+export AIRFLOW_HOME=/tmp/airflow-e2e AIRFLOW__CORE__LOAD_EXAMPLES=False
+export AIRFLOW__CORE__DAGS_FOLDER=$PWD/tests/system
+airflow db migrate
+PIXI_E2E_TEST=1 pytest tests/system                # dag.test(): real task runner and pixi
 ```
 
 ## License
