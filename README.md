@@ -38,17 +38,19 @@ with DAG("my_pipeline") as dag:
         python_callable="mymodule:evaluate",
     )
 
-    # inline manifest, same options as pixi.toml; written to a temporary directory
+    # inline manifest, same options as pixi.toml; env_cache_path keeps the environment for later runs
     report = PixiOperator(
         task_id="report",
         dependencies={"python": ">=3.10", "numpy": "*"},
         pypi_dependencies={"pandas": ">=2.0"},
         channels=["conda-forge"],
         platforms=["linux-64", "osx-arm64"],
+        env_cache_path="/var/cache/pixi-airflow",
         python_callable="mymodule:report",
+        op_args=[evaluate.output],  # upstream XCom, resolved at run time
     )
 
-    train >> evaluate >> report
+    train >> evaluate
 ```
 
 Specify the manifest in exactly one way: `pixi_project_path` (directory), `pixi_toml_path`
@@ -60,23 +62,36 @@ accepts the same arguments as `PixiOperator`:
 ```python
 from airflow.sdk import dag, task
 
-from mypkg.jobs import train  # importable on the worker and inside the Pixi environment
-
 
 @dag
 def my_dag():
-    task.pixi(pixi_project_path="/path/to/pixi/project", environment="cuda")(train)(epochs=3)
+    @task
+    def epochs() -> int:
+        return 3
+
+    @task.pixi(pixi_project_path="/path/to/pixi/project", environment="cuda")
+    def train(epochs: int) -> float:
+        import torch  # imports go inside the function: it runs in the Pixi environment
+
+        return torch.rand(epochs).mean().item()
+
+    train(epochs())
 ```
 
 How it works:
 
-- `python_callable` is resolved to `"module.path:name"` when the task is created. At run
-  time the operator calls `pixi run --manifest-path <project> python -c <runner>` with the
-  project directory as working directory, so modules in that directory are importable.
-- `op_args` / `op_kwargs` are written to a temporary JSON file that the runner reads, so
-  they must be JSON-serializable; anything else arrives as its `str()`.
-- The runner prints the return value as JSON on the last line of stdout; the operator
-  parses it and pushes it to XCom.
+- At run time the operator calls `pixi run --manifest-path <manifest> python -c <runner>`,
+  with the manifest's directory as working directory.
+- A function is shipped as source, as `@task.virtualenv` does, so it can be defined in the
+  DAG file. It must be self-contained: imports inside it, and no variables from enclosing
+  functions (pass them as arguments). A `"module.path:name"` string is imported inside the
+  environment instead, for code that lives in the project or is installed there.
+- `op_args` / `op_kwargs` are templated, so upstream XComs and Jinja work. They and the
+  return value cross into and out of the environment as JSON, or with `serializer="pickle"`
+  for values JSON cannot hold (their types must be importable on both sides). A value that
+  does not fit the serializer fails the task instead of being converted.
+- Everything the run prints, pixi's messages included, is streamed to the task log.
+- The return value is the task's XCom.
 
 ## Operators and decorators
 
@@ -85,11 +100,9 @@ How it works:
 | `PixiOperator(task_id, python_callable, op_args=None, op_kwargs=None, ...)` | runs the callable in a Pixi environment |
 | `@task.pixi(...)` | TaskFlow variant of `PixiOperator` |
 
-`python_callable` is a `"module.path:callable_name"` string or a callable, and must be
-importable inside the Pixi environment: its code lives in the project directory or is
-installed in the environment. For `@task.pixi` this means a function defined in the DAG
-file does not work, because Airflow imports DAG files under generated module names that
-do not exist inside the environment.
+Templated fields: `op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path` and the
+cache directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
+`pyproject.toml`; pixi uses exactly that file.
 
 ### Inline manifest options
 
@@ -99,8 +112,18 @@ do not exist inside the environment.
 - **PyPI:** `pypi_dependencies`, `pypi_options`
 - **Multiple environments:** `environments` (dict), `feature` (dict of feature configs)
 
-Same structure as the [Pixi manifest](https://pixi.sh/dev/reference/pixi_manifest/). The
-temporary directory is removed after the run unless `cleanup_temp_manifest=False`.
+Same structure as the [Pixi manifest](https://pixi.sh/dev/reference/pixi_manifest/).
+
+By default an inline environment is built in a temporary directory for each run and removed
+afterwards (keep it for inspection with `cleanup_temp_manifest=False`). With
+`env_cache_path`, it lives in `<env_cache_path>/pixi-<hash of the manifest>` and later runs
+of the same manifest reuse it, like `venv_cache_path` of `PythonVirtualenvOperator`. Remove
+old directories there yourself; concurrent runs of one manifest are safe.
+
+### Timeouts and killing
+
+There is no built-in time limit: set Airflow's `execution_timeout`. When it expires, or the
+task is killed, the operator stops pixi and every process it started.
 
 ### Environment
 
@@ -133,7 +156,7 @@ the tool's default applies.
 
 ```bash
 uv sync --group dev
-pytest tests/unit                                  # pixi mocked
+pytest tests/unit                                  # a fake pixi runs the command with this Python
 PIXI_INTEGRATION_TEST=1 pytest tests/integration   # real pixi on PATH, needs conda-forge access
 ```
 
