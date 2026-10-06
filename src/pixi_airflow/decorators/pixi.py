@@ -14,7 +14,9 @@ class PixiDecoratedOperator(DecoratedOperator, PixiOperator):  # type: ignore[mi
     """``@task.pixi``: run the function inside a Pixi environment."""
 
     custom_operator_name = "@task.pixi"
-    template_fields = (*DecoratedOperator.template_fields, *PixiOperator.template_fields)
+    # PixiOperator's, which include DecoratedOperator's op_args and op_kwargs
+    template_fields = PixiOperator.template_fields
+    template_fields_renderers = PixiOperator.template_fields_renderers
 
     def __init__(
         self,
@@ -47,8 +49,8 @@ def pixi_task(
 ):
     """``@task.pixi``: run the function inside a Pixi environment.
 
-    Accepts every ``PixiOperator`` argument. The function is called by its module
-    path, so it must be importable inside the Pixi environment.
+    Accepts every ``PixiOperator`` argument. Like ``@task.virtualenv``, the function's source is
+    shipped to the environment, so it must be self-contained: imports go inside the function.
     """
     return task_decorator_factory(
         python_callable=python_callable,

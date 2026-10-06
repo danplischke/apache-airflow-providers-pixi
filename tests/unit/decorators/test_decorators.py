@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from airflow.sdk import dag, task
 
@@ -24,11 +23,11 @@ def test_task_pixi_builds_operator() -> None:
     assert type(op).__name__ == "PixiDecoratedOperator"
     assert op.custom_operator_name == "@task.pixi"
     assert op.python_callable is add_one
-    assert op._callable_ref.endswith(":add_one")
-    assert op._manifest_dir == os.path.abspath("/proj")
+    assert op.pixi_project_path == "/proj"
     assert op.environment == "cuda"
     assert list(op.op_args) == [2]
     assert {"op_args", "op_kwargs", "pixi_project_path"} <= set(op.template_fields)
+    assert len(op.template_fields) == len(set(op.template_fields))
 
 
 def test_task_pixi_keeps_xcom_args_and_dependencies() -> None:
@@ -47,25 +46,22 @@ def test_task_pixi_keeps_xcom_args_and_dependencies() -> None:
     assert len(consume_op.op_args) == 1
 
 
-def test_task_pixi_execute_calls_function_by_module_path() -> None:
+def test_task_pixi_runs_a_function_defined_in_the_dag(fake_pixi, tmp_path) -> None:
+    """The function only exists inside the DAG function, so it has to travel as source."""
+
     @dag
     def test_dag():
-        task.pixi(pixi_project_path="/proj", auto_install_pixi=False)(add_one)(2)
+        @task.pixi(pixi_project_path=str(tmp_path), pixi_binary=str(fake_pixi.path), auto_install_pixi=False)
+        def double(x: int) -> dict:
+            import sys
 
-    op = test_dag().get_task("add_one")
-    shipped = {}
+            return {"value": x * 2, "prefix": sys.prefix}
 
-    def fake_run(cmd, **kwargs):
-        with open(kwargs["env"]["AIRFLOW_PIXI_ARGS_FILE"]) as f:
-            shipped.update(json.load(f))
-        return MagicMock(returncode=0, stdout="3", stderr="")
+        double(21)
 
-    with (
-        patch("pixi_airflow.operators.pixi.shutil.which", return_value="/usr/bin/pixi"),
-        patch("pixi_airflow.operators.pixi.subprocess.run", side_effect=fake_run) as m_run,
-    ):
-        assert op.execute({"ti": MagicMock()}) == 3
-    assert m_run.call_args[0][0][:4] == ["/usr/bin/pixi", "run", "--manifest-path", os.path.abspath("/proj")]
-    assert shipped["callable"] == "add_one"
-    assert shipped["module"] == op._callable_ref.split(":")[0]
-    assert shipped["args"] == [2]
+    op = test_dag().get_task("double")
+    result = op.execute({"ti": MagicMock()})
+    assert result["value"] == 42
+    call = fake_pixi.calls[-1]
+    assert call["argv"][:3] == ["run", "--manifest-path", str(tmp_path)]
+    assert os.path.realpath(call["cwd"]) == os.path.realpath(tmp_path)
