@@ -1,0 +1,201 @@
+name: QA Check
+
+on:
+  push:
+    branches: [main]
+  # No paths filter: these jobs are required status checks on main, and a
+  # filtered-out PR would wait on them forever.
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION_DEFAULT: "3.14"
+
+jobs:
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      - name: Run ruff linter
+        run: uv run ruff check src tests --output-format=github
+
+      - name: Run ruff format check
+        run: uv run ruff format src tests --check
+
+  test:
+    name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        # requires-python is >=3.10, so the oldest supported version is exercised too.
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # Airflow does not support Windows, so macOS is the only extra platform.
+          - os: macos-latest
+            python-version: "3.14"
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev --python ${{ matrix.python-version }}
+
+      - name: Run unit tests with coverage
+        run: uv run pytest tests/unit -v --cov=pixi_airflow --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0 — https://github.com/codecov/codecov-action/releases/tag/v7.0.0
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+          verbose: true
+
+  smoke-test:
+    name: Smoke Test (base install)
+    runs-on: ubuntu-latest
+    # Airflow validates get_provider_info whenever it is imported; an invalid
+    # one breaks `import airflow` for every installation that has this package.
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install the base package only
+        run: uv sync --locked --no-default-groups
+
+      - name: Smoke import
+        run: |
+          uv run --no-sync python -c "import pixi_airflow; print('import OK')"
+          uv run --no-sync python -c "from pixi_airflow.get_provider_info import get_provider_info; get_provider_info(); print('provider info OK')"
+          uv run --no-sync python -c "from airflow.sdk import task; assert hasattr(task, 'pixi'); print('@task.pixi registered')"
+
+  integration-test:
+    name: Integration Test (real pixi)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      - name: Install pixi
+        env:
+          PIXI_VERSION: v0.81.0
+          PIXI_NO_PATH_UPDATE: "1"
+        run: |
+          curl -fsSL https://pixi.sh/install.sh | bash
+          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+
+      - name: Run integration tests
+        env:
+          PIXI_INTEGRATION_TEST: "1"
+        run: uv run --no-sync pytest tests/integration -v
+
+  system-test:
+    name: System Test (Airflow dag.test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      - name: Install pixi
+        env:
+          PIXI_VERSION: v0.81.0
+          PIXI_NO_PATH_UPDATE: "1"
+        run: |
+          curl -fsSL https://pixi.sh/install.sh | bash
+          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+
+      - name: Init Airflow DB
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+          AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system
+        run: uv run --no-sync airflow db migrate
+
+      - name: Run system tests
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+          AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system
+          PIXI_E2E_TEST: "1"
+        run: uv run --no-sync pytest tests/system -v
+
+  package:
+    name: Build & Check Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Build package
+        run: uv build
+
+      - name: Check package
+        # twine < 7 rejects newer Metadata-Version values that PyPI accepts.
+        run: |
+          pip install 'twine>=7.0.0'
+          twine check dist/*
