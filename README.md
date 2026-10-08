@@ -1,9 +1,12 @@
 # apache-airflow-providers-pixi
 
-Apache Airflow 3 provider to run Python callables inside [Pixi](https://pixi.sh)-managed
-environments: `PixiOperator` and the `@task.pixi` TaskFlow decorator.
+Apache Airflow 3 provider to run Python callables, Bash commands and sensor checks inside
+[Pixi](https://pixi.sh)-managed environments, on the worker or in a Kubernetes pod: `PixiOperator`,
+`PixiBashOperator`, `PixiKubernetesPodOperator` and `PixiSensor`, each with a TaskFlow decorator.
 
 **Documentation:** https://danplischke.github.io/apache-airflow-providers-pixi/
+(for LLMs and coding agents: [llms.txt](https://danplischke.github.io/apache-airflow-providers-pixi/llms.txt),
+[llms-full.txt](https://danplischke.github.io/apache-airflow-providers-pixi/llms-full.txt))
 
 ## Installation
 

@@ -100,6 +100,41 @@ link = "https://github.com/danplischke/apache-airflow-providers-pixi"
 icon = "fontawesome/brands/python"
 link = "https://pypi.org/project/apache-airflow-providers-pixi/"
 
+# llms.txt (https://llmstxt.org): an index of the docs for LLMs, plus every page in llms-full.txt
+[project.plugins.llmstxt]
+full_output = "llms-full.txt"
+markdown_description = """
+Apache Airflow 3 provider that runs Python callables, Bash commands and sensor checks inside
+[Pixi](https://pixi.sh) environments, on the worker or in a Kubernetes pod. Install with
+`pip install apache-airflow-providers-pixi` (add the `[cncf.kubernetes]` extra for the pod operator);
+the workers need pixi 0.81.0 or newer, which the provider never installs itself. An environment is a
+Pixi project (`pixi_project_path`), a manifest file (`pixi_toml_path`), or an inline manifest
+(`dependencies`, `pypi_dependencies`, `requirements`). Functions are shipped as source, so they must
+be self-contained: imports inside the function, no variables from enclosing functions.
+"""
+
+[project.plugins.llmstxt.sections]
+Basics = [
+  { "index.md" = "Installation, requirements and a quick start" },
+  { "changelog.md" = "Changes per release" },
+  { "security.md" = "Security considerations: installing pixi, run-time dependency resolution, pickle, caches" },
+]
+Guides = [
+  { "operators/pixi.md" = "PixiOperator: choosing the environment, inline manifests, arguments and return values, logs, timeouts, cache directories" },
+  { "decorators/pixi.md" = "@task.pixi and how to write a function that is shipped to the environment" },
+  { "operators/bash.md" = "PixiBashOperator and @task.pixi_bash: Bash commands with pixi run" },
+  { "operators/kubernetes.md" = "PixiKubernetesPodOperator and @task.pixi_kubernetes: Pixi environments in Kubernetes pods" },
+  { "sensors/pixi.md" = "PixiSensor and @task.pixi_sensor: sensor checks inside a Pixi environment" },
+  { "extending.md" = "Building other providers' operators and decorators on the Pixi base classes" },
+]
+"Development" = [
+  { "system-tests.md" = "Example DAGs and how to run the unit, integration and system tests" },
+  { "installing-from-sources.md" = "Installing from sources, the local Airflow and building the docs" },
+]
+Optional = [
+  { "api.md" = "Python API reference of every operator, sensor, decorator and base class" },
+]
+
 [project.plugins.mkdocstrings.handlers.python]
 paths = ["src"]
 inventories = [
