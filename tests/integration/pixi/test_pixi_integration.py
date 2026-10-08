@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime
 import os
 import shutil
+import sys
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
@@ -111,6 +112,26 @@ def test_inline_manifest() -> None:
         auto_install_pixi=False,
     )
     assert run(op).startswith("3.11.")
+
+
+def package_info():
+    import importlib.metadata
+    import platform
+
+    return {"python": platform.python_version(), "six": importlib.metadata.version("six")}
+
+
+def test_requirements_alone_get_the_workers_python() -> None:
+    # pixi installs PyPI packages only with a conda python; the operator adds the worker's
+    op = PixiOperator(
+        task_id="t",
+        requirements=["six==1.16.0"],
+        python_callable=package_info,
+        auto_install_pixi=False,
+    )
+    info = run(op)
+    assert info["six"] == "1.16.0"
+    assert info["python"].startswith(f"{sys.version_info.major}.{sys.version_info.minor}.")
 
 
 def test_toml_path_uses_that_file(tmp_path: Path) -> None:

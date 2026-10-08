@@ -6,7 +6,8 @@ Pixi project, from a manifest file, or from a manifest you write inline in the D
 
 !!! tip
     For TaskFlow, use the [`@task.pixi`](../decorators/pixi.md) decorator. It accepts the same
-    arguments.
+    arguments. To build your own operators or decorators on top of it, see
+    [Building on the Pixi Operator](../extending.md).
 
 ## Using the operator
 
@@ -60,7 +61,8 @@ otherwise.
 
 === "Inline manifest"
 
-    `dependencies` (conda) and/or `pypi_dependencies` describe the environment directly in the DAG.
+    `dependencies` (conda), `pypi_dependencies` and/or `requirements` describe the environment
+    directly in the DAG.
 
     ```python
     PixiOperator(
@@ -89,9 +91,29 @@ The inline options have the same structure as the
 | `name` | `[workspace] name` | |
 | `dependencies` | `[dependencies]`, as a dict or a list of MatchSpecs | |
 | `pypi_dependencies` | `[pypi-dependencies]` | |
+| `requirements` | `[pypi-dependencies]`, from pip requirement strings | |
 | `pypi_options` | `[pypi-options]` | |
 | `feature` | `[feature.<name>]`: a dict of features with `channels`, `platforms`, `dependencies` and `pypi_dependencies` | |
 | `environments` | `[environments]` | |
+
+### Pip requirements
+
+`requirements` takes pip requirement strings, as `@task.virtualenv` does, and adds them to
+`[pypi-dependencies]`. An element may hold several lines, such as a requirements file rendered from a
+template:
+
+```python
+PixiOperator(
+    task_id="report",
+    requirements=["pandas>=2", "mylib @ git+https://github.com/org/mylib@v1.2"],
+    python_callable=report,
+)
+```
+
+Versions, extras, git and URL requirements are supported. Pip options such as `-r` or `--index-url`
+are not: use `pypi_options` for indexes. If an inline manifest has PyPI packages but no `python`
+dependency, it gets the worker's Python version, as a virtualenv would. `requirements` can't extend a
+project or manifest file; add the packages to that manifest instead.
 
 !!! tip
     Pixi solves an environment for every listed platform. Restricting `platforms` to the ones your
@@ -162,6 +184,21 @@ sequenceDiagram
     E-->>W: return value via output file → XCom
 ```
 
+## Environment variables
+
+The run inherits the worker's environment. `env_vars` adds to it or overrides it:
+
+```python
+PixiOperator(
+    task_id="train",
+    pixi_project_path="/path/to/project",
+    python_callable="mymodule:train",
+    env_vars={"OMP_NUM_THREADS": "4"},
+)
+```
+
+`env_vars` is not templated, so secrets passed here are never rendered into the UI.
+
 ## Logs, timeouts and killing
 
 Everything the run prints, pixi's own messages included, is streamed to the task log as it
@@ -209,8 +246,8 @@ unset, so the tool's default applies.
 
 ## Templated fields
 
-`op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `pixi_cache_dir_variable`,
-`uv_cache_dir_variable` and `pip_cache_dir_variable`.
+`op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `requirements`,
+`pixi_cache_dir_variable`, `uv_cache_dir_variable` and `pip_cache_dir_variable`.
 
 ## Reference
 

@@ -227,6 +227,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "apache-airflow" },
+    { name = "packaging" },
 ]
 
 [package.dev-dependencies]
@@ -243,7 +244,10 @@ docs = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "apache-airflow", specifier = ">=3.0" }]
+requires-dist = [
+    { name = "apache-airflow", specifier = ">=3.0" },
+    { name = "packaging", specifier = ">=22" },
+]
 
 [package.metadata.requires-dev]
 dev = [
