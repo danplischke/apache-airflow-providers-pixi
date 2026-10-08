@@ -1,0 +1,14 @@
+# Pixi project used by the DAGs in dev/dags (`just standalone`).
+[workspace]
+name = "pixi-airflow-showcase"
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+
+[dependencies]
+python = "3.12.*"
+
+[feature.lint.dependencies]
+ruff = "*"
+
+[environments]
+lint = ["lint"]

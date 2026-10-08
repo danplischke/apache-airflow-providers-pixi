@@ -23,7 +23,9 @@ from airflow.sdk import dag, task
 from airflow.sdk.exceptions import AirflowTaskTimeout
 from airflow.sdk.execution_time.timeout import timeout
 
+from airflow.providers.pixi.operators.bash import PixiBashOperator
 from airflow.providers.pixi.operators.pixi import PixiOperator
+from airflow.providers.pixi.sensors.pixi import PixiSensor
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("PIXI_INTEGRATION_TEST") != "1",
@@ -88,7 +90,6 @@ def test_module_path_from_the_project(pixi_project: Path) -> None:
         pixi_project_path=str(pixi_project),
         python_callable=f"{JOB_MODULE}:where",
         op_kwargs={"x": 1},
-        auto_install_pixi=False,
     )
     result = run(op)
     assert result["x"] == 1
@@ -96,9 +97,7 @@ def test_module_path_from_the_project(pixi_project: Path) -> None:
 
 
 def test_function_source_runs_in_the_environment(pixi_project: Path) -> None:
-    op = PixiOperator(
-        task_id="t", pixi_project_path=str(pixi_project), python_callable=where, op_args=[2], auto_install_pixi=False
-    )
+    op = PixiOperator(task_id="t", pixi_project_path=str(pixi_project), python_callable=where, op_args=[2])
     result = run(op)
     assert result["x"] == 2
     assert Path(result["prefix"]).resolve() == env_prefix(pixi_project)
@@ -109,7 +108,6 @@ def test_inline_manifest() -> None:
         task_id="t",
         dependencies={"python": "3.11.*"},
         python_callable="platform:python_version",
-        auto_install_pixi=False,
     )
     assert run(op).startswith("3.11.")
 
@@ -127,7 +125,6 @@ def test_requirements_alone_get_the_workers_python() -> None:
         task_id="t",
         requirements=["six==1.16.0"],
         python_callable=package_info,
-        auto_install_pixi=False,
     )
     info = run(op)
     assert info["six"] == "1.16.0"
@@ -145,7 +142,6 @@ def test_toml_path_uses_that_file(tmp_path: Path) -> None:
         task_id="t",
         pixi_toml_path=str(tmp_path / "pyproject.toml"),
         python_callable="platform:python_version",
-        auto_install_pixi=False,
     )
     assert run(op).startswith("3.13.")
 
@@ -158,7 +154,6 @@ def test_env_cache_path_reuses_the_environment(tmp_path: Path) -> None:
             python_callable=where,
             op_args=[3],
             env_cache_path=str(tmp_path),
-            auto_install_pixi=False,
         )
 
     first = run(op())
@@ -180,7 +175,6 @@ def test_pickle_serializer(pixi_project: Path) -> None:
         python_callable=next_day,
         op_args=[datetime.date(2026, 1, 1)],
         serializer="pickle",
-        auto_install_pixi=False,
     )
     assert run(op) == datetime.date(2026, 1, 2)
 
@@ -190,7 +184,7 @@ def test_output_is_streamed_to_the_task_log(pixi_project: Path) -> None:
         print("hello from pixi")
         return 1
 
-    op = PixiOperator(task_id="t", pixi_project_path=str(pixi_project), python_callable=chatty, auto_install_pixi=False)
+    op = PixiOperator(task_id="t", pixi_project_path=str(pixi_project), python_callable=chatty)
     with patch.object(PixiOperator, "log", new_callable=PropertyMock) as log:
         assert run(op) == 1
     assert "hello from pixi" in [c.args[1] for c in log.return_value.info.call_args_list if c.args[0] == "%s"]
@@ -203,7 +197,6 @@ def test_execution_timeout_stops_pixi_and_the_callable(pixi_project: Path, tmp_p
         pixi_project_path=str(pixi_project),
         python_callable=heartbeat,
         op_args=[str(beat)],
-        auto_install_pixi=False,
     )
     started = time.monotonic()
     with pytest.raises(AirflowTaskTimeout), timeout(5):
@@ -217,7 +210,7 @@ def test_execution_timeout_stops_pixi_and_the_callable(pixi_project: Path, tmp_p
 def test_task_pixi_with_a_function_defined_in_the_dag(pixi_project: Path) -> None:
     @dag
     def test_dag():
-        @task.pixi(pixi_project_path=str(pixi_project), auto_install_pixi=False)
+        @task.pixi(pixi_project_path=str(pixi_project))
         def double(x: int) -> dict:
             import sys
 
@@ -228,3 +221,31 @@ def test_task_pixi_with_a_function_defined_in_the_dag(pixi_project: Path) -> Non
     result = test_dag().get_task("double").execute({"ti": MagicMock()})
     assert result["value"] == 10
     assert Path(result["prefix"]).resolve() == env_prefix(pixi_project)
+
+
+def test_bash_operator_runs_every_part_of_the_command_in_the_environment(pixi_project: Path) -> None:
+    op = PixiBashOperator(
+        task_id="t",
+        pixi_project_path=str(pixi_project),
+        bash_command='echo start && python -c "import sys; print(sys.prefix)" | cat',
+    )
+    assert Path(op.execute({})).resolve() == env_prefix(pixi_project)
+
+
+def python_prefix_is(prefix_dir: str) -> bool:
+    import sys
+    from pathlib import Path
+
+    return Path(sys.prefix).resolve() == Path(prefix_dir).resolve()
+
+
+def test_sensor_pokes_in_the_environment(pixi_project: Path) -> None:
+    sensor = PixiSensor(
+        task_id="s",
+        pixi_project_path=str(pixi_project),
+        python_callable=python_prefix_is,
+        op_args=[str(env_prefix(pixi_project))],
+        poke_interval=1,
+        timeout=600,
+    )
+    sensor.execute({"ti": MagicMock(try_number=1), "task_instance": MagicMock(try_number=1)})

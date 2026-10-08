@@ -51,7 +51,7 @@ def test_task_pixi_runs_a_function_defined_in_the_dag(fake_pixi, tmp_path) -> No
 
     @dag
     def test_dag():
-        @task.pixi(pixi_project_path=str(tmp_path), pixi_binary=str(fake_pixi.path), auto_install_pixi=False)
+        @task.pixi(pixi_project_path=str(tmp_path), pixi_binary=str(fake_pixi.path))
         def double(x: int) -> dict:
             import sys
 

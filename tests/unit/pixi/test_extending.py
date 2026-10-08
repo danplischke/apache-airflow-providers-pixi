@@ -118,7 +118,6 @@ def test_mixin_wraps_a_task_pixi_function(fake_pixi, monkeypatch) -> None:
             tag="step",
             pypi_dependencies={"pandas": "*"},
             pixi_binary=str(fake_pixi.path),
-            auto_install_pixi=False,
             cleanup_temp_manifest=False,
         )
         def double(x: int) -> int:
@@ -151,9 +150,7 @@ def test_unwrapped_source_is_unchanged_outside_execute() -> None:
 
 
 def test_operator_ships_generated_source_for_a_placeholder(fake_pixi) -> None:
-    op = RuntimeFunctionOperator(
-        task_id="flow", reference="dag", pixi_binary=str(fake_pixi.path), auto_install_pixi=False, **INLINE
-    )
+    op = RuntimeFunctionOperator(task_id="flow", reference="dag", pixi_binary=str(fake_pixi.path), **INLINE)
     assert op.execute({"ti": MagicMock(), "run_id": "r1"}) == {"label": "flow", "result": "DAG/R1", "token": None}
 
 
@@ -164,7 +161,6 @@ def test_wrapper_requirements_cannot_extend_a_project_environment(fake_pixi, tmp
         pixi_project_path=str(tmp_path),
         python_callable="json:dumps",
         pixi_binary=str(fake_pixi.path),
-        auto_install_pixi=False,
     )
     assert not op.inline_manifest
     op.requirements = ["wrapper-runtime"]

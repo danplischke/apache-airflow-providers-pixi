@@ -29,6 +29,22 @@ uv build            # writes the sdist and wheel to dist/
 pip install dist/apache_airflow_providers_pixi-*.whl
 ```
 
+## Trying it in a local Airflow
+
+The repository has a local Airflow for trying the operators, with [just](https://just.systems) and
+pixi installed:
+
+```bash
+uv sync --group dev
+just standalone   # Airflow on SQLite at http://localhost:8080, no login
+```
+
+It loads the DAGs in `dev/dags`: `pixi_showcase` runs every operator and decorator on the worker
+against the sample project in `dev/project`, and `pixi_kubernetes_showcase` runs
+`@task.pixi_kubernetes` on the cluster in `~/.kube/config`. Its state lives in `.airflow/`;
+`just airflow-reset` deletes it, and `just airflow <command>` runs the Airflow CLI against it, for
+example `just airflow dags test pixi_showcase`.
+
 ## Building this documentation
 
 ```bash

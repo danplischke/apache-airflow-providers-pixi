@@ -9,15 +9,23 @@ written for `@task.virtualenv` usually works on `@task.pixi` unchanged.
 
 | Member | Use |
 |---|---|
-| [`get_python_source()`][airflow.providers.pixi.operators.pixi.PixiOperator.get_python_source] | The source shipped to the environment for a function. Override it to append a wrapper that rebinds the function's name. |
+| [`get_python_source()`][airflow.providers.pixi.operators.pixi.BasePixiPythonOperator.get_python_source] | The source shipped to the environment for a function. Override it to append a wrapper that rebinds the function's name. |
 | `python_callable.__name__` | The name the runner calls in the shipped namespace. |
 | `op_args`, `op_kwargs` | Arguments of the call. Set them in `execute` to pass values computed at run time. |
 | `env_vars` | Environment variables for the run. Not templated, so secrets set here are never rendered into the UI. |
 | `requirements` | Pip requirement strings added to an inline manifest's `[pypi-dependencies]`. |
-| [`inline_manifest`][airflow.providers.pixi.operators.pixi.PixiOperator.inline_manifest] | Whether `requirements` can extend the environment. A project or manifest file has to bring the packages itself. |
+| [`inline_manifest`][airflow.providers.pixi.operators.pixi.BasePixiOperator.inline_manifest] | Whether `requirements` can extend the environment. A project or manifest file has to bring the packages itself. |
 | `custom_operator_name` | `@task.<name>` of your decorator. That decorator line is removed from the shipped source, like `@task.pixi`. |
 
-Set `op_kwargs`, `env_vars` and `requirements` in `execute` before calling `super().execute`. Restore
+Set `op_kwargs`, `env_vars` and `requirements` in `execute` before calling `super().execute`.
+
+The same members exist on [`PixiSensor`](sensors/pixi.md) and, except `env_vars` (use
+`KubernetesPodOperator`'s), on [`PixiKubernetesPodOperator`](operators/kubernetes.md), so a wrapper can
+target the worker, a pod or a sensor. To run a Pixi environment some other way, subclass
+[`BasePixiOperator`][airflow.providers.pixi.operators.pixi.BasePixiOperator], which chooses and
+prepares the environment (`local_manifest()`, `inline_manifest_toml()`, `pixi_run_command()`), or
+[`BasePixiPythonOperator`][airflow.providers.pixi.operators.pixi.BasePixiPythonOperator], which adds the
+callable and its serialized input (`callable_input()`). Restore
 `env_vars` and `requirements` afterwards if you add to them, so a retry starts from the DAG's arguments.
 
 ## A wrapping task decorator

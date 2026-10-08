@@ -16,10 +16,26 @@ def get_provider_info() -> dict[str, object]:
         "operators": [
             {
                 "integration-name": "Pixi",
-                "python-modules": ["airflow.providers.pixi.operators.pixi"],
+                "python-modules": [
+                    "airflow.providers.pixi.operators.pixi",
+                    "airflow.providers.pixi.operators.bash",
+                    "airflow.providers.pixi.operators.kubernetes",
+                ],
+            }
+        ],
+        "sensors": [
+            {
+                "integration-name": "Pixi",
+                "python-modules": ["airflow.providers.pixi.sensors.pixi"],
             }
         ],
         "task-decorators": [
             {"name": "pixi", "class-name": "airflow.providers.pixi.decorators.pixi.pixi_task"},
+            {"name": "pixi_bash", "class-name": "airflow.providers.pixi.decorators.bash.pixi_bash_task"},
+            {
+                "name": "pixi_kubernetes",
+                "class-name": "airflow.providers.pixi.decorators.kubernetes.pixi_kubernetes_task",
+            },
+            {"name": "pixi_sensor", "class-name": "airflow.providers.pixi.decorators.sensor.pixi_sensor_task"},
         ],
     }

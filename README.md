@@ -9,11 +9,13 @@ environments: `PixiOperator` and the `@task.pixi` TaskFlow decorator.
 
 ```bash
 pip install apache-airflow-providers-pixi
+pip install "apache-airflow-providers-pixi[cncf.kubernetes]"  # adds PixiKubernetesPodOperator
 ```
 
-Requires `apache-airflow>=3.0` and the [Pixi CLI](https://pixi.sh) on the workers (for
-example `brew install pixi`). If Pixi is not on `PATH`, the operator installs it with the
-official install script unless you pass `auto_install_pixi=False`.
+Requires `apache-airflow>=3.0`, and [Pixi](https://pixi.sh/latest/installation/) 0.81.0 or
+newer installed on the workers, for example in the worker image. The provider never installs
+pixi itself: a task fails if `pixi` is not on `PATH` (or at `pixi_binary`) or is older than
+0.81.0.
 
 ## Usage
 
@@ -95,21 +97,54 @@ How it works:
 - Everything the run prints, pixi's messages included, is streamed to the task log.
 - The return value is the task's XCom.
 
+### Bash, Kubernetes and sensors
+
+```python
+from airflow.sdk import task
+
+from airflow.providers.pixi.operators.bash import PixiBashOperator
+
+# `pixi run --manifest-path /repo bash -c '...'`: every part of the command runs in the environment
+PixiBashOperator(
+    task_id="train_cli",
+    pixi_project_path="/repo",
+    environment="{{ params.env }}",  # templated, so it can be picked per run
+    bash_command="python train.py --epochs 3 | tee train.log",
+)
+
+
+@task.pixi_kubernetes(image="ghcr.io/prefix-dev/pixi:0.81.0", requirements=["pandas"], namespace="jobs")
+def summarize(path: str) -> dict:
+    import pandas as pd
+
+    return pd.read_parquet(path).describe().to_dict()
+
+
+@task.pixi_sensor(requirements=["s3fs"], poke_interval=60, mode="reschedule", env_cache_path="/var/cache/pixi-airflow")
+def landed(path: str) -> bool:
+    import s3fs
+
+    return s3fs.S3FileSystem().exists(path)
+```
+
 ## Operators and decorators
 
 | | |
 |---|---|
-| `PixiOperator(task_id, python_callable, op_args=None, op_kwargs=None, ...)` | runs the callable in a Pixi environment |
-| `@task.pixi(...)` | TaskFlow variant of `PixiOperator` |
+| `PixiOperator` / `@task.pixi` | runs a Python callable in a Pixi environment on the worker |
+| `PixiBashOperator` / `@task.pixi_bash` | runs a Bash command with `pixi run ... bash -c`, like `BashOperator` |
+| `PixiKubernetesPodOperator` / `@task.pixi_kubernetes` | runs a Python callable in a Pixi environment in a Kubernetes pod (`[cncf.kubernetes]` extra) |
+| `PixiSensor` / `@task.pixi_sensor` | waits for a Python callable, run in a Pixi environment, to return a truthy value |
 
-Templated fields: `op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`,
-`requirements` and the cache directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
+All of them choose the environment the same way (below). Templated fields: `op_args`,
+`op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `requirements` and the cache
+directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
 `pyproject.toml`; pixi uses exactly that file.
 
 ### Inline manifest options
 
 - **Workspace:** `channels` (default `["conda-forge"]`), `platforms` (default `linux-64`,
-  `osx-64`, `osx-arm64`, `win-64`), `name`
+  `osx-64`, `osx-arm64`, `win-64`), `workspace_name`
 - **Conda:** `dependencies` (dict, or list of MatchSpecs)
 - **PyPI:** `pypi_dependencies`, `requirements` (pip requirement strings, as for
   `@task.virtualenv`), `pypi_options`. With PyPI packages but no `python` dependency, the
@@ -139,12 +174,11 @@ task is killed, the operator stops pixi and every process it started.
 If the manifest defines several environments (for example `default`, `test` and `cuda`
 under `[environments]`), set `environment` to the one to use. Omit it for Pixi's default.
 
-### Auto-install Pixi
+### Pixi binary
 
-If the Pixi binary (`pixi_binary`, default `pixi`) is not on `PATH`, the operator runs the
-[official install script](https://pixi.sh) (Unix: `curl | sh`, Windows: PowerShell
-`irm | iex`) and uses the installed binary (`~/.pixi/bin` on Unix,
-`%LOCALAPPDATA%\pixi\bin` on Windows). Pass `auto_install_pixi=False` to fail instead.
+`pixi_binary` (default `pixi`) is a name on `PATH` or a path. Before the first run with a
+binary, the operator checks `pixi --version` against the minimum, 0.81.0
+(`airflow.providers.pixi.utils.pixi.MIN_PIXI_VERSION`).
 
 ### Cache directories (Airflow Variables)
 
@@ -181,6 +215,17 @@ export AIRFLOW__CORE__DAGS_FOLDER=$PWD/tests/system/pixi
 airflow db migrate
 PIXI_E2E_TEST=1 pytest tests/system/pixi           # dag.test(): real task runner and pixi
 ```
+
+### Local Airflow
+
+`just standalone` starts Airflow (`airflow standalone`, SQLite) at http://localhost:8080 without a
+login, with the DAGs in [dev/dags](dev/dags): every operator and decorator against the sample project
+in [dev/project](dev/project), and one for a local Kubernetes cluster. It keeps its state in
+`.airflow/`; `just airflow-reset` deletes it, `just airflow <command>` runs the Airflow CLI against it
+(for example `just airflow dags test pixi_showcase`), and `AIRFLOW_PORT` changes the port. Pixi has to
+be installed (`brew install pixi`).
+
+### Recipes
 
 With [just](https://just.systems), `just dev` sets everything up and `just` lists the recipes:
 `just test`, `just test-integration` and `just test-system` run the tiers above, `just check`

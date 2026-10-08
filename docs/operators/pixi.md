@@ -88,7 +88,7 @@ The inline options have the same structure as the
 |---|---|---|
 | `channels` | `[workspace] channels` | `["conda-forge"]` |
 | `platforms` | `[workspace] platforms` | `linux-64`, `osx-64`, `osx-arm64`, `win-64` |
-| `name` | `[workspace] name` | |
+| `workspace_name` | `[workspace] name` | |
 | `dependencies` | `[dependencies]`, as a dict or a list of MatchSpecs | |
 | `pypi_dependencies` | `[pypi-dependencies]` | |
 | `requirements` | `[pypi-dependencies]`, from pip requirement strings | |
@@ -133,6 +133,8 @@ up yourself.
 
 If the manifest defines several environments, for example `default`, `test` and `cuda` under
 `[environments]`, set `environment` to the one to use. Omit it for Pixi's default environment.
+`environment` is templated, so it can be chosen at run time, for example
+`environment="{{ params.env }}"`.
 
 ## Arguments and return values
 
@@ -209,17 +211,23 @@ There is no built-in time limit: set Airflow's `execution_timeout`. When it expi
 killed, the operator stops pixi and every process it started (`SIGTERM`, then `SIGKILL` after
 10 seconds).
 
-## Auto-install Pixi
+## Pixi binary
 
-If the Pixi binary (`pixi_binary`, default `pixi`) is not on `PATH`, the operator runs the
-[official install script](https://pixi.sh/latest/installation/) and uses the installed binary:
+Pixi has to be installed on the workers, in version 0.81.0 or newer
+([`MIN_PIXI_VERSION`][airflow.providers.pixi.utils.pixi.MIN_PIXI_VERSION]). The provider never
+downloads or installs it. Install it in the worker image, for example with your package manager or
+the [official installer](https://pixi.sh/latest/installation/), pinned to a version:
 
-| Platform | Install command | Binary |
-|---|---|---|
-| Linux, macOS | `curl -fsSL https://pixi.sh/install.sh \| sh` | `~/.pixi/bin/pixi` |
-| Windows | `irm -useb https://pixi.sh/install.ps1 \| iex` | `%LOCALAPPDATA%\pixi\bin\pixi.exe` |
+```dockerfile
+ENV PIXI_VERSION=v0.81.0 PIXI_HOME=/usr/local
+RUN curl -fsSL https://pixi.sh/install.sh | sh
+```
 
-Pass `auto_install_pixi=False` to fail instead, for example on workers without internet access.
+`pixi_binary` (default `pixi`) is a name on `PATH` or a path. Before the first run with a binary,
+the operator checks `pixi --version`. A task fails if pixi is missing or older than the minimum.
+
+With `pixi_project_path`, the worker's pixi must also be able to read the project's `pixi.lock`, so
+keep it at least as new as the pixi that wrote the lock file.
 
 ## Cache directories
 
@@ -246,8 +254,13 @@ unset, so the tool's default applies.
 
 ## Templated fields
 
-`op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `requirements`,
+`op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `requirements`,
 `pixi_cache_dir_variable`, `uv_cache_dir_variable` and `pip_cache_dir_variable`.
+
+The environment arguments of this page (`pixi_project_path`, `pixi_toml_path`, `environment`, the
+inline manifest options, `env_cache_path` and `pixi_binary`) work the same way for the
+[Bash operator](bash.md), the [Kubernetes pod operator](kubernetes.md) and the
+[sensor](../sensors/pixi.md).
 
 ## Reference
 
