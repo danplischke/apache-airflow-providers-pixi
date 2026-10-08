@@ -3,12 +3,11 @@
 A Pixi task runs code with the permissions of the Airflow worker, like any other Python task. The
 points below are specific to this provider.
 
-## Auto-installing Pixi
+## Installing Pixi
 
-When the Pixi binary is missing, the operator downloads and runs the official install script from
-`pixi.sh` (see [Auto-install Pixi](operators/pixi.md#auto-install-pixi)). If your workers must not
-execute downloaded scripts, install Pixi as part of the worker image and pass
-`auto_install_pixi=False`, for example for all tasks via `default_args`.
+The provider never downloads or installs pixi: tasks use the binary installed on the workers (see
+[Pixi binary](operators/pixi.md#pixi-binary)). Install it when you build the worker image, from a
+source you trust and pinned to a version, rather than at run time.
 
 ## Dependencies resolved at run time
 

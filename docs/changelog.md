@@ -17,8 +17,15 @@ Initial version of the provider.
 - `requirements`: pip requirement strings added to an inline manifest's `[pypi-dependencies]`; an
   inline manifest with PyPI packages but no `python` gets the worker's Python version.
 - `env_vars`: environment variables for the run, not templated.
-- Automatic installation of the Pixi CLI when it is missing.
+- Requires pixi 0.81.0 or newer on the workers (`MIN_PIXI_VERSION`), checked before the first run
+  with a binary. The provider never installs pixi.
 - Pixi, uv and pip cache directories configurable through Airflow Variables.
+- `PixiBashOperator` and `@task.pixi_bash`: run a Bash command with `pixi run ... bash -c`, like
+  `BashOperator`.
+- `PixiKubernetesPodOperator` and `@task.pixi_kubernetes`: run a Python callable in a Pixi environment
+  in a Kubernetes pod, with the `cncf.kubernetes` extra.
+- `PixiSensor` and `@task.pixi_sensor`: a sensor whose callable runs in a Pixi environment on each poke.
+- `environment` is templated, so the environment can be chosen per run.
 
 ### Extending
 

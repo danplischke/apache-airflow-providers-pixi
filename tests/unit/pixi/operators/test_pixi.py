@@ -18,13 +18,14 @@ from airflow.sdk import DAG, dag, setup, task
 from airflow.sdk.exceptions import AirflowTaskTimeout
 from airflow.sdk.execution_time.timeout import timeout
 
-from airflow.providers.pixi.operators.pixi import (
-    PixiOperator,
-    _build_pixi_toml,
-    _ensure_pixi_available,
-    _function_source,
-    _pypi_dependencies_from_requirements,
+from airflow.providers.pixi.operators.pixi import PixiOperator
+from airflow.providers.pixi.utils.manifest import build_pixi_toml as _build_pixi_toml
+from airflow.providers.pixi.utils.manifest import (
+    pypi_dependencies_from_requirements as _pypi_dependencies_from_requirements,
 )
+from airflow.providers.pixi.utils.pixi import MIN_PIXI_VERSION
+from airflow.providers.pixi.utils.pixi import resolve_pixi as _resolve_pixi
+from airflow.providers.pixi.utils.source import function_source as _function_source
 
 tomllib = pytest.importorskip("tomllib") if sys.version_info >= (3, 11) else None
 
@@ -50,7 +51,7 @@ def make(fake_pixi, **kwargs) -> PixiOperator:
     if "pixi_project_path" not in kwargs and "pixi_toml_path" not in kwargs:
         kwargs.setdefault("dependencies", {"python": "3.12.*"})
     kwargs.setdefault("python_callable", add)
-    return PixiOperator(task_id="t", pixi_binary=str(fake_pixi.path), auto_install_pixi=False, **kwargs)
+    return PixiOperator(task_id="t", pixi_binary=str(fake_pixi.path), **kwargs)
 
 
 def run(op: PixiOperator):
@@ -372,7 +373,7 @@ def test_build_pixi_toml_writes_valid_toml_for_tables_and_quotes() -> None:
     toml = _build_pixi_toml(
         channels=["conda-forge"],
         platforms=["linux-64"],
-        name='my "project"',
+        workspace_name='my "project"',
         dependencies=["python 3.12.*", "numpy>=2", "conda-forge::scipy"],
         pypi_dependencies={"torch": {"version": ">=2", "extras": ["cuda"]}, "pandas": ">=2.0"},
         pypi_options={"index-url": "https://pypi.example/simple"},
@@ -444,7 +445,7 @@ def test_requirements_are_templated(fake_pixi) -> None:
     op = make(fake_pixi, requirements=["{{ params.package }}"], dependencies=None)
     assert "requirements" in op.template_fields
     op.render_template_fields({"params": {"package": "pandas==2.2"}})
-    assert op._pypi_dependencies() == {"pandas": "==2.2"}
+    assert '[pypi-dependencies]\n"pandas" = "==2.2"' in op.inline_manifest_toml()
 
 
 def test_requirements_and_pypi_dependencies_must_not_overlap(fake_pixi) -> None:
@@ -505,19 +506,47 @@ def test_operator_init_requires_one_manifest_source() -> None:
         )
 
 
-def test_ensure_pixi_available_uses_which_when_found() -> None:
-    """When pixi is on PATH, _ensure_pixi_available returns it without installing."""
-    with patch("airflow.providers.pixi.operators.pixi.shutil.which") as m_which:
-        m_which.return_value = "/usr/local/bin/pixi"
-        path = _ensure_pixi_available("pixi", auto_install=True)
-    assert path == "/usr/local/bin/pixi"
-    m_which.assert_called_once_with("pixi")
-
-
-def test_ensure_pixi_available_raises_when_not_found_and_no_auto_install() -> None:
-    """When pixi not on PATH and auto_install=False, raises AirflowException."""
+def test_missing_pixi_fails_without_installing_it(monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "")
     with (
-        patch("airflow.providers.pixi.operators.pixi.shutil.which", return_value=None),
-        pytest.raises(AirflowException, match="not found on PATH"),
+        patch("airflow.providers.pixi.utils.pixi.subprocess.run") as subprocess_run,
+        pytest.raises(AirflowException, match=f"not found on PATH. Install pixi {MIN_PIXI_VERSION} or newer"),
     ):
-        _ensure_pixi_available("pixi", auto_install=False)
+        _resolve_pixi("pixi")
+    subprocess_run.assert_not_called()
+
+
+def test_pixi_older_than_the_minimum_is_rejected(make_fake_pixi) -> None:
+    old = make_fake_pixi("0.80.2")
+    op = PixiOperator(task_id="t", python_callable="json:dumps", op_args=[1], pixi_binary=str(old.path), **INLINE)
+    with pytest.raises(AirflowException, match=f"is pixi 0.80.2, but this provider needs pixi {MIN_PIXI_VERSION}"):
+        run(op)
+    assert old.calls == []
+
+
+@pytest.mark.parametrize("version", ["0.81.0", "0.81.1", "1.2.0", "0.90.0-dev"])
+def test_pixi_at_or_above_the_minimum_runs(make_fake_pixi, version: str) -> None:
+    pixi = make_fake_pixi(version)
+    assert (
+        run(PixiOperator(task_id="t", python_callable="json:dumps", op_args=[1], pixi_binary=str(pixi.path), **INLINE))
+        == "1"
+    )
+
+
+def test_pixi_version_is_asked_once_per_binary(fake_pixi) -> None:
+    run(make(fake_pixi, op_args=[1]))
+    run(make(fake_pixi, op_args=[2]))
+    assert fake_pixi.version_calls == 1
+
+
+def test_unreadable_pixi_version_fails(tmp_path: Path) -> None:
+    binary = tmp_path / "pixi"
+    binary.write_text("#!/bin/sh\necho 'not pixi'\n")
+    binary.chmod(0o755)
+    with pytest.raises(AirflowException, match="Could not read the pixi version.*not pixi"):
+        _resolve_pixi(str(binary))
+
+
+def test_ci_tests_against_the_minimum_pixi() -> None:
+    workflow = (Path(__file__).parents[4] / ".github" / "workflows" / "qa.yml").read_text()
+    assert f"PIXI_VERSION: v{MIN_PIXI_VERSION}" in workflow

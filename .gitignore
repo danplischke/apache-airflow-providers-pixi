@@ -243,3 +243,7 @@ cython_debug/
 
 # pixi environments, created next to a manifest
 .pixi/
+
+# local Airflow of `just standalone`
+.airflow/
+dev/project/pixi.lock

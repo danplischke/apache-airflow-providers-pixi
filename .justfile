@@ -1,7 +1,7 @@
 set dotenv-load
 set shell := ['sh', '-cu']
 
-src := "src tests"
+src := "src tests dev"
 airflow_e2e_home := env_var_or_default("AIRFLOW_E2E_HOME", "/tmp/airflow-e2e")
 
 @_:
@@ -138,6 +138,28 @@ release ver:
     git tag -a "v{{ ver }}" -m "Release v{{ ver }}"
     git push origin "v{{ ver }}"
     echo "Pushed v{{ ver }}; follow the release at $(gh repo view --json url --jq .url)/actions"
+
+# Local Airflow on SQLite at http://localhost:8080 (AIRFLOW_PORT), no login, DAGs in dev/dags; Ctrl+C stops it
+[group('airflow')]
+standalone:
+    #!/usr/bin/env sh
+    set -eu
+    command -v pixi > /dev/null || echo "pixi is not on PATH, so Pixi tasks will fail: brew install pixi, or see https://pixi.sh/latest/installation/"
+    . dev/airflow-env.sh
+    exec uv run airflow standalone
+
+# Run the Airflow CLI against the local Airflow, e.g. `just airflow dags test pixi_showcase`
+[group('airflow')]
+airflow *args:
+    #!/usr/bin/env sh
+    set -eu
+    . dev/airflow-env.sh
+    exec uv run airflow {{ args }}
+
+# Delete the local Airflow's database, logs and cached inline environments
+[group('airflow')]
+airflow-reset:
+    rm -rf .airflow
 
 [group('maintenance')]
 clean:

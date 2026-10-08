@@ -27,11 +27,20 @@ requires-python = ">=3.10"
 dependencies = [
     "apache-airflow>=3.0",
     # requirement strings are translated to pixi's [pypi-dependencies]
+    # BashOperator and PythonSensor, which the shell operator and the sensor build on
+    "apache-airflow-providers-standard",
     "packaging>=22",
+]
+
+[project.optional-dependencies]
+# PixiKubernetesPodOperator and @task.pixi_kubernetes
+"cncf.kubernetes" = [
+    "apache-airflow-providers-cncf-kubernetes",
 ]
 
 [dependency-groups]
 dev = [
+    "apache-airflow-providers-pixi[cncf.kubernetes]",
     "pre-commit>=3.5",
     "pytest>=7.0",
     "pytest-cov>=4.0",
