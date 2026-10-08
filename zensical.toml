@@ -1,0 +1,150 @@
+# Documentation site, built with Zensical (https://zensical.org) and deployed to GitHub Pages by
+# .github/workflows/docs.yml. Preview locally with: uv run --group docs zensical serve
+[project]
+site_name = "apache-airflow-providers-pixi"
+site_description = "Apache Airflow 3 provider to run Python callables in Pixi environments."
+site_author = "Dan Plischke"
+site_url = "https://danplischke.github.io/apache-airflow-providers-pixi/"
+repo_url = "https://github.com/danplischke/apache-airflow-providers-pixi"
+repo_name = "danplischke/apache-airflow-providers-pixi"
+edit_uri = "edit/main/docs/"
+copyright = """
+Copyright &copy; Dan Plischke. Licensed under the Apache License, Version 2.0.<br>
+Apache Airflow, Apache, Airflow and the Airflow logo are trademarks of The Apache Software Foundation.
+This project is not affiliated with or endorsed by The Apache Software Foundation.
+"""
+
+# Same sections as the provider docs on airflow.apache.org
+nav = [
+  { "Basics" = [
+    { "Home" = "index.md" },
+    { "Changelog" = "changelog.md" },
+    { "Security" = "security.md" },
+  ] },
+  { "Guides" = [
+    { "Pixi Operator" = "operators/pixi.md" },
+    { "Pixi Task Decorator" = "decorators/pixi.md" },
+  ] },
+  { "References" = [
+    { "Python API" = "api.md" },
+  ] },
+  { "System tests" = [
+    { "System Tests" = "system-tests.md" },
+  ] },
+  { "Resources" = [
+    { "PyPI Repository" = "https://pypi.org/project/apache-airflow-providers-pixi/" },
+    { "Installing from sources" = "installing-from-sources.md" },
+  ] },
+  { "Commits" = [
+    { "Detailed list of commits" = "https://github.com/danplischke/apache-airflow-providers-pixi/commits/main/" },
+  ] },
+]
+
+extra_css = ["stylesheets/airflow.css"]
+
+[project.theme]
+variant = "classic"
+language = "en"
+features = [
+  "content.action.edit",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[project.theme.icon]
+logo = "lucide/wind"
+repo = "fontawesome/brands/github"
+
+# Fonts of airflow.apache.org; Rubik for headings is loaded in airflow.css
+[project.theme.font]
+text = "Roboto"
+code = "Roboto Mono"
+
+# Colors are set in airflow.css
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/danplischke/apache-airflow-providers-pixi"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/python"
+link = "https://pypi.org/project/apache-airflow-providers-pixi/"
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+inventories = [
+  "https://docs.python.org/3/objects.inv",
+  "https://airflow.apache.org/docs/apache-airflow/stable/objects.inv",
+  "https://airflow.apache.org/docs/task-sdk/stable/objects.inv",
+]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "sphinx"
+docstring_section_style = "list"
+filters = ["!^_"]
+heading_level = 2
+members_order = "source"
+merge_init_into_class = true
+line_length = 88
+separate_signature = true
+show_root_full_path = true
+show_root_heading = true
+show_signature_annotations = true
+show_source = true
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+signature_crossrefs = true
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = "¶"
+pymdownx.betterem = {}
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+pymdownx.smartsymbols = {}
+# examples are included from tests/system, relative to the repository root
+pymdownx.snippets.base_path = ["."]
+pymdownx.snippets.check_paths = true
+pymdownx.snippets.dedent_subsections = true
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true

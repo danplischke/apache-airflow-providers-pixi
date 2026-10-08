@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import json
 from pathlib import Path
@@ -18,6 +19,16 @@ def test_provider_info_matches_provider_yaml() -> None:
     expected = {k: v for k, v in yaml.safe_load(PROVIDER_YAML.read_text()).items() if k != "versions"}
     expected["description"] = expected["description"].strip()
     assert get_provider_info() == expected
+
+
+def test_advertised_paths_are_importable() -> None:
+    info = get_provider_info()
+    for operator in info["operators"]:
+        for module in operator["python-modules"]:
+            importlib.import_module(module)
+    for decorator in info["task-decorators"]:
+        module, _, attr = decorator["class-name"].rpartition(".")
+        assert callable(getattr(importlib.import_module(module), attr))
 
 
 def test_provider_info_matches_airflow_schema() -> None:

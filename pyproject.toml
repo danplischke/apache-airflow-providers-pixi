@@ -3,7 +3,7 @@ requires = ["flit_core>=3.12,<5"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "pixi-airflow"
+name = "apache-airflow-providers-pixi"
 version = "0.1.0"
 description = "Apache Airflow 3 provider to run Python callables in Pixi environments (PixiOperator and @task.pixi)."
 readme = "README.md"
@@ -35,8 +35,16 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.8",
 ]
+docs = [
+    "mkdocstrings-python>=2.0",
+    # formats long signatures in the API reference
+    "ruff>=0.8",
+    # zensical needs Python 3.11+; build the docs with a newer Python than the oldest supported
+    "zensical>=0.0.69; python_version >= '3.11'",
+]
 
 [project.urls]
+Documentation = "https://danplischke.github.io/apache-airflow-providers-pixi/"
 "Source Code" = "https://github.com/danplischke/apache-airflow-providers-pixi"
 "Bug Tracker" = "https://github.com/danplischke/apache-airflow-providers-pixi/issues"
 
@@ -59,3 +67,6 @@ addopts = "--import-mode=importlib"
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+
+[tool.ruff.lint.isort]
+known-first-party = ["airflow.providers.pixi"]

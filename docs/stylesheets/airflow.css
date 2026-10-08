@@ -1,0 +1,335 @@
+/* Look of the Apache Airflow documentation (airflow.apache.org/docs), on top of Zensical's classic theme. */
+
+@import url("https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700&display=swap");
+
+:root {
+  --af-blue: #017cee;
+  --af-blue-dark: #0052a3;
+  --af-text: #51504f;
+  --af-muted: #707070;
+  --af-border: #cbcbcb;
+  --af-panel: #f8f9fa;
+  --af-info-bg: #e7f2fa;
+  --af-info-border: #6ab0de;
+  --af-code: #a31515;
+  --af-code-bg: #f6f6f6;
+  --af-footer: #51504f;
+  --af-heading-font: "Rubik", var(--md-text-font, "Roboto"), sans-serif;
+}
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--af-blue);
+  --md-primary-fg-color--light: #3a9bf4;
+  --md-primary-fg-color--dark: var(--af-blue-dark);
+  --md-accent-fg-color: var(--af-blue-dark);
+  --md-accent-fg-color--transparent: rgba(1, 124, 238, 0.1);
+  --md-default-fg-color: var(--af-text);
+  --md-default-fg-color--light: var(--af-muted);
+  --md-typeset-color: var(--af-text);
+  --md-typeset-a-color: var(--af-blue);
+  --md-code-fg-color: #212529;
+  --md-code-bg-color: var(--af-code-bg);
+  --md-footer-bg-color: var(--af-footer);
+  --md-footer-bg-color--dark: #434241;
+}
+
+/* Dark mode of airflow.apache.org */
+[data-md-color-scheme="slate"] {
+  --af-text: #e6edf3;
+  --af-muted: #9aa4b2;
+  --af-border: #30363d;
+  --af-panel: #1a1f2e;
+  --af-info-bg: #102a43;
+  --af-info-border: #38bdf8;
+  --af-code: #f0abfc;
+  --af-code-bg: #242937;
+  --af-footer: #242937;
+  --md-hue: 225;
+  --md-default-bg-color: #0f1117;
+  --md-default-fg-color: var(--af-text);
+  --md-default-fg-color--light: var(--af-muted);
+  --md-typeset-color: var(--af-text);
+  --md-primary-fg-color: #38bdf8;
+  --md-primary-fg-color--dark: #0d1117;
+  --md-accent-fg-color: #7dd3fc;
+  --md-accent-fg-color--transparent: rgba(56, 189, 248, 0.1);
+  --md-typeset-a-color: #38bdf8;
+  --md-code-fg-color: #e6edf3;
+  --md-code-bg-color: #0d1117;
+  --md-footer-bg-color: var(--af-footer);
+  --md-footer-bg-color--dark: #1a1f2e;
+}
+
+/* Header: white bar with a thin border instead of a colored one */
+.md-header,
+.md-header[data-md-state="shadow"],
+.md-header--shadow {
+  background-color: var(--md-default-bg-color);
+  color: var(--af-text);
+  border-bottom: 1px solid var(--af-border);
+  box-shadow: none;
+}
+.md-header--shadow {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+.md-header__title {
+  font-family: var(--af-heading-font);
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+.md-header__button.md-logo {
+  color: var(--af-blue);
+}
+[data-md-color-scheme="slate"] .md-header__button.md-logo {
+  color: #38bdf8;
+}
+.md-search__form {
+  background-color: var(--af-panel);
+  border: 1px solid var(--af-border);
+  border-radius: 4px;
+}
+.md-search__form:hover {
+  background-color: var(--af-panel);
+}
+.md-search__input,
+.md-search__input::placeholder,
+.md-search__icon {
+  color: var(--af-text);
+}
+.md-source {
+  color: var(--af-text);
+}
+
+/* Left sidebar: a panel with uppercase section captions */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    background-color: var(--af-panel);
+    margin-top: 1.2rem;
+    padding: 0.6rem 0.4rem;
+  }
+  .md-nav--primary > .md-nav__list > .md-nav__item--section > .md-nav__link {
+    font-family: var(--af-heading-font);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    color: var(--md-default-fg-color);
+    margin-top: 1rem;
+  }
+  /* the site name above the sections; it is already in the header */
+  .md-nav--primary > .md-nav__title {
+    display: none;
+  }
+  .md-nav--primary > .md-nav__list > .md-nav__item--section:first-child > .md-nav__link {
+    margin-top: 0.2rem;
+  }
+}
+.md-nav__item .md-nav__link {
+  font-size: 0.8rem;
+  color: var(--md-default-fg-color--light);
+}
+.md-nav__link--active,
+.md-nav__item .md-nav__link--active {
+  color: var(--md-typeset-a-color);
+  font-weight: 500;
+}
+
+/* Right table of contents: a border on the left, the current section highlighted */
+.md-sidebar--secondary .md-nav__list {
+  border-left: 2px solid var(--af-border);
+}
+.md-sidebar--secondary .md-nav__link {
+  padding-left: 0.6rem;
+  margin-left: -2px;
+  border-left: 2px solid transparent;
+}
+.md-sidebar--secondary .md-nav__link--active {
+  border-left: 4px solid var(--md-typeset-a-color);
+}
+.md-sidebar--secondary .md-nav__title {
+  font-family: var(--af-heading-font);
+  color: var(--md-default-fg-color);
+}
+
+/* Breadcrumbs */
+.md-path {
+  font-size: 0.75rem;
+}
+.md-path__link {
+  color: var(--md-typeset-a-color);
+  text-decoration: underline;
+}
+
+/* Content */
+.md-typeset {
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4 {
+  font-family: var(--af-heading-font);
+  color: var(--md-default-fg-color);
+}
+.md-typeset h1 {
+  font-size: 2.25em;
+  font-weight: 500;
+  letter-spacing: normal;
+  margin-bottom: 1.2em;
+}
+.md-typeset h2 {
+  font-size: 1.5em;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.md-typeset h3 {
+  font-size: 1.2em;
+  font-weight: 500;
+}
+.md-typeset a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.md-typeset .headerlink,
+.md-typeset .md-nav a,
+.md-typeset .tabbed-labels a {
+  text-decoration: none;
+}
+.md-typeset .headerlink {
+  color: var(--md-typeset-a-color);
+  margin-left: 0.25em;
+}
+.md-typeset :not(pre) > code {
+  color: var(--af-code);
+  background-color: var(--af-code-bg);
+  border-radius: 2px;
+}
+.md-typeset a > code,
+.md-typeset a:hover > code {
+  color: inherit;
+}
+.md-typeset pre > code,
+.md-typeset .highlight > pre,
+.md-typeset .highlighttable {
+  border: 1px solid var(--af-border);
+  border-radius: 0;
+}
+.md-typeset .highlight span.filename {
+  font-family: var(--md-code-font-family);
+  font-weight: 500;
+  background-color: var(--af-panel);
+  border: 1px solid var(--af-border);
+  border-bottom: none;
+  border-radius: 0;
+}
+
+/* Tables */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--af-border);
+  border-radius: 0;
+  font-size: 0.75rem;
+}
+.md-typeset table:not([class]) th {
+  font-weight: 700;
+  color: var(--md-default-fg-color);
+  border-bottom: 2px solid var(--af-border);
+}
+.md-typeset table:not([class]) td {
+  border-top: 1px solid var(--af-border);
+}
+
+/* Admonitions: flat, with a thick left border, as in Sphinx. Blue for every type except the
+   warning and danger families, which keep orange and red from the Airflow palette. */
+/* doubled classes outrank the theme's per-type colors, e.g. .md-typeset .tip.admonition */
+.md-typeset .admonition.admonition,
+.md-typeset details:not(.af-none) {
+  --af-admonition: var(--af-info-border);
+  --af-admonition-bg: var(--af-info-bg);
+  border: none;
+  border-left: 4px solid var(--af-admonition);
+  border-radius: 0;
+  background-color: var(--af-admonition-bg);
+  box-shadow: none;
+  font-size: 0.75rem;
+}
+.md-typeset .admonition:is(.warning, .caution, .attention),
+.md-typeset details:is(.warning, .caution, .attention) {
+  --af-admonition: #ffa630;
+  --af-admonition-bg: rgba(255, 166, 48, 0.1);
+}
+.md-typeset .admonition:is(.danger, .error, .failure, .fail, .missing, .bug),
+.md-typeset details:is(.danger, .error, .failure, .fail, .missing, .bug) {
+  --af-admonition: #ed6a5a;
+  --af-admonition-bg: rgba(237, 106, 90, 0.1);
+}
+.md-typeset .admonition > .admonition-title,
+.md-typeset details > summary {
+  background-color: transparent;
+  font-weight: 500;
+}
+.md-typeset .admonition > .admonition-title::before,
+.md-typeset details > summary::before {
+  background-color: var(--af-admonition);
+}
+
+/* Definition lists render like parameters on airflow.apache.org: a code label in a box */
+.md-typeset dl > dt {
+  display: inline-block;
+  font-family: var(--md-code-font-family);
+  font-weight: 700;
+  padding: 0.2em 0.6em;
+  background-color: var(--af-panel);
+  border-top: 3px solid var(--af-border);
+}
+.md-typeset dl > dt code {
+  color: var(--md-default-fg-color);
+  background: none;
+  padding: 0;
+}
+
+/* Python API: sphinx-autoapi style signatures */
+.md-typeset .doc-heading {
+  font-family: var(--md-code-font-family);
+}
+.md-typeset h2.doc-heading,
+.md-typeset h3.doc-heading {
+  display: table;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.3em 0.6em;
+  background-color: var(--af-info-bg);
+  border-top: 4px solid var(--af-info-border);
+}
+.md-typeset h4.doc-heading {
+  display: table;
+  font-size: 0.8rem;
+  padding: 0.2em 0.6em;
+  background-color: var(--af-panel);
+  border-left: 6px solid var(--af-border);
+}
+.md-typeset .doc-signature {
+  border-left: 1px solid var(--af-border);
+}
+.md-typeset .doc-contents {
+  padding-left: 1rem;
+}
+
+/* Footer: the grey bar of airflow.apache.org */
+.md-footer {
+  background-color: var(--md-footer-bg-color);
+}
+.md-footer-meta {
+  background-color: var(--md-footer-bg-color--dark);
+}
+.md-copyright {
+  font-size: 0.6rem;
+  line-height: 1.6;
+}
+
+/* Back-to-top button: square, as on airflow.apache.org */
+.md-top {
+  border-radius: 0;
+  background-color: var(--md-default-bg-color);
+  border: 1px solid var(--af-border);
+  color: var(--af-text);
+}

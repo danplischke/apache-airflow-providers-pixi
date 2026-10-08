@@ -3,7 +3,7 @@
 
 def get_provider_info() -> dict[str, object]:
     return {
-        "package-name": "pixi-airflow",
+        "package-name": "apache-airflow-providers-pixi",
         "name": "Pixi",
         "description": "Run Python callables inside `Pixi <https://pixi.sh>`__ environments.",
         "integrations": [
