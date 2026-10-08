@@ -182,6 +182,10 @@ airflow db migrate
 PIXI_E2E_TEST=1 pytest tests/system/pixi           # dag.test(): real task runner and pixi
 ```
 
+With [just](https://just.systems), `just dev` sets everything up and `just` lists the recipes:
+`just test`, `just test-integration` and `just test-system` run the tiers above, `just check`
+runs what CI runs, and `just bump <version>` / `just release <version>` cut a release.
+
 ## License
 
 Apache-2.0
