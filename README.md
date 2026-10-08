@@ -233,4 +233,4 @@ runs what CI runs, and `just bump <version>` / `just release <version>` cut a re
 
 ## License
 
-Apache-2.0
+MIT
