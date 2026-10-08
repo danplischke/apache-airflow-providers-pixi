@@ -41,6 +41,7 @@ The minimum Apache Airflow version supported by this provider distribution is `3
 | `apache-airflow` | `>=3.0` |
 | `apache-airflow-providers-standard` | |
 | `packaging` | `>=22` |
+| `tomlkit` | `>=0.12` |
 
 With the `cncf.kubernetes` extra:
 

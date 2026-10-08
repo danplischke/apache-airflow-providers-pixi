@@ -30,6 +30,8 @@ dependencies = [
     # BashOperator and PythonSensor, which the shell operator and the sensor build on
     "apache-airflow-providers-standard",
     "packaging>=22",
+    # writes inline pixi.toml manifests; tomllib in the standard library only reads TOML
+    "tomlkit>=0.12",
 ]
 
 [project.optional-dependencies]

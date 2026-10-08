@@ -2,38 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Sequence
 from typing import Any
 
+import tomlkit
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
 _REQUIREMENT_COMMENT = re.compile(r"(^|\s)#.*$")
 # a conda MatchSpec: name, optionally with a channel (``conda-forge::numpy``), then the version
 _MATCHSPEC = re.compile(r"^\s*(?:(?P<channel>[^:\s]+)::)?(?P<name>[A-Za-z0-9_.\-]+)\s*(?P<version>.*?)\s*$")
-
-
-def _toml_key(key: Any) -> str:
-    return json.dumps(str(key))
-
-
-def _toml_value(value: Any) -> str:
-    """Render ``value`` as TOML. JSON strings, numbers, booleans and arrays are valid TOML; tables are not."""
-    if isinstance(value, dict):
-        return "{ " + ", ".join(f"{_toml_key(k)} = {_toml_value(v)}" for k, v in value.items()) + " }"
-    if isinstance(value, (list, tuple)):
-        return "[" + ", ".join(_toml_value(v) for v in value) + "]"
-    if isinstance(value, (str, bool, int, float)):
-        return json.dumps(value)
-    raise TypeError(f"cannot write {value!r} to a pixi manifest")
-
-
-def _table(lines: list[str], header: str, entries: dict[str, Any]) -> None:
-    lines.append(f"[{header}]")
-    lines.extend(f"{_toml_key(k)} = {_toml_value(v)}" for k, v in entries.items())
-    lines.append("")
 
 
 def conda_dependencies(dependencies: dict[str, Any] | Sequence[str] | None) -> dict[str, Any]:
@@ -106,25 +85,28 @@ def build_pixi_toml(
     feature: dict[str, Any] | None = None,
 ) -> str:
     """Build pixi.toml content from inline config (same options as pixi.toml format)."""
-    lines = ["[workspace]", "channels = " + _toml_value(list(channels)), "platforms = " + _toml_value(list(platforms))]
+    workspace: dict[str, Any] = {"channels": list(channels), "platforms": list(platforms)}
     if workspace_name:
-        lines.append("name = " + _toml_value(workspace_name))
-    lines.append("")
+        workspace["name"] = workspace_name
+    manifest: dict[str, Any] = {"workspace": workspace}
     if dependencies:
-        _table(lines, "dependencies", conda_dependencies(dependencies))
+        manifest["dependencies"] = conda_dependencies(dependencies)
     if pypi_dependencies:
-        _table(lines, "pypi-dependencies", pypi_dependencies)
+        manifest["pypi-dependencies"] = dict(pypi_dependencies)
     if pypi_options:
-        _table(lines, "pypi-options", pypi_options)
+        manifest["pypi-options"] = dict(pypi_options)
+    features: dict[str, Any] = {}
     for feat_name, feat_cfg in (feature or {}).items():
         if not isinstance(feat_cfg, dict):
             continue
-        header = f"feature.{_toml_key(feat_name)}"
-        _table(lines, header, {k: feat_cfg[k] for k in ("channels", "platforms") if k in feat_cfg})
+        table = {k: list(feat_cfg[k]) for k in ("channels", "platforms") if k in feat_cfg}
         if "dependencies" in feat_cfg:
-            _table(lines, f"{header}.dependencies", conda_dependencies(feat_cfg["dependencies"]))
+            table["dependencies"] = conda_dependencies(feat_cfg["dependencies"])
         if "pypi_dependencies" in feat_cfg:
-            _table(lines, f"{header}.pypi-dependencies", feat_cfg["pypi_dependencies"])
+            table["pypi-dependencies"] = dict(feat_cfg["pypi_dependencies"])
+        features[feat_name] = table
+    if features:
+        manifest["feature"] = features
     if environments:
-        _table(lines, "environments", environments)
-    return "\n".join(lines)
+        manifest["environments"] = dict(environments)
+    return tomlkit.dumps(manifest)

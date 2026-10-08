@@ -7,6 +7,7 @@ runtime wraps the user function, and sets ``env_vars`` and ``requirements`` whil
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -18,6 +19,11 @@ from airflow.sdk.bases.decorator import task_decorator_factory
 
 from airflow.providers.pixi.decorators.pixi import PixiDecoratedOperator
 from airflow.providers.pixi.operators.pixi import PixiOperator
+
+if sys.version_info >= (3, 11):
+    import tomllib as tomli
+else:
+    tomli = pytest.importorskip("tomli")
 
 INLINE = {"dependencies": {"python": "3.12.*"}}
 
@@ -127,9 +133,7 @@ def test_mixin_wraps_a_task_pixi_function(fake_pixi, monkeypatch) -> None:
 
     op = dag.get_task("double")
     assert op.execute({"ti": MagicMock()}) == {"label": "step", "result": 42, "token": "secret"}
-    manifest = manifest_of(fake_pixi)
-    assert '"pandas" = "*"' in manifest
-    assert '"wrapper-runtime" = ">=1"' in manifest
+    assert tomli.loads(manifest_of(fake_pixi))["pypi-dependencies"] == {"pandas": "*", "wrapper-runtime": ">=1"}
     # restored after the run, so a retry starts from the DAG's arguments
     assert op.env_vars is None
     assert op.requirements == []
