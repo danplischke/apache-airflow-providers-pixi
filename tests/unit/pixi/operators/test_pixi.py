@@ -6,6 +6,7 @@ import datetime
 import functools
 import inspect
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -22,7 +23,10 @@ from airflow.providers.pixi.operators.pixi import (
     _build_pixi_toml,
     _ensure_pixi_available,
     _function_source,
+    _pypi_dependencies_from_requirements,
 )
+
+tomllib = pytest.importorskip("tomllib") if sys.version_info >= (3, 11) else None
 
 INLINE = {"dependencies": {"python": "3.12.*"}}
 
@@ -356,6 +360,127 @@ def test_build_pixi_toml_with_environments() -> None:
     assert "[environments]" in toml
     assert "test" in toml
     assert "cuda" in toml
+
+
+def parse_toml(text: str) -> dict:
+    if tomllib is None:
+        pytest.skip("tomllib needs Python 3.11")
+    return tomllib.loads(text)
+
+
+def test_build_pixi_toml_writes_valid_toml_for_tables_and_quotes() -> None:
+    toml = _build_pixi_toml(
+        channels=["conda-forge"],
+        platforms=["linux-64"],
+        name='my "project"',
+        dependencies=["python 3.12.*", "numpy>=2", "conda-forge::scipy"],
+        pypi_dependencies={"torch": {"version": ">=2", "extras": ["cuda"]}, "pandas": ">=2.0"},
+        pypi_options={"index-url": "https://pypi.example/simple"},
+        feature={"gpu": {"platforms": ["linux-64"], "dependencies": {"cuda": "12.*"}}},
+        environments={"gpu": {"features": ["gpu"], "solve-group": "default"}},
+    )
+    manifest = parse_toml(toml)
+    assert manifest["workspace"]["name"] == 'my "project"'
+    assert manifest["dependencies"] == {
+        "python": "3.12.*",
+        "numpy": ">=2",
+        "scipy": {"version": "*", "channel": "conda-forge"},
+    }
+    assert manifest["pypi-dependencies"]["torch"] == {"version": ">=2", "extras": ["cuda"]}
+    assert manifest["pypi-options"]["index-url"] == "https://pypi.example/simple"
+    assert manifest["feature"]["gpu"]["dependencies"] == {"cuda": "12.*"}
+    assert manifest["environments"]["gpu"] == {"features": ["gpu"], "solve-group": "default"}
+
+
+def test_requirements_become_pypi_dependencies() -> None:
+    requirements_file = """
+        # comment
+        requests>=2.31  # trailing comment
+
+        black[jupyter]==24.1
+    """
+    assert _pypi_dependencies_from_requirements(
+        [
+            "pandas",
+            requirements_file,
+            "mylib @ git+https://github.com/org/mylib@v1.2",
+            "private @ git+ssh://git@github.com/org/private",
+            "wheel-pkg @ https://example.com/wheel_pkg-1.0-py3-none-any.whl",
+        ]
+    ) == {
+        "pandas": "*",
+        "requests": ">=2.31",
+        "black": {"version": "==24.1", "extras": ["jupyter"]},
+        "mylib": {"git": "https://github.com/org/mylib", "rev": "v1.2"},
+        "private": {"git": "ssh://git@github.com/org/private"},
+        "wheel-pkg": {"url": "https://example.com/wheel_pkg-1.0-py3-none-any.whl"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("requirements", "error"),
+    [
+        (["-r other.txt"], "pip options"),
+        (['pandas; python_version < "3.11"'], "environment markers"),
+        (["pandas", "Pandas>=2"], "listed twice"),
+        (["not a requirement!"], "invalid requirement"),
+    ],
+)
+def test_unsupported_requirements_are_rejected_when_the_dag_is_parsed(requirements, error) -> None:
+    with pytest.raises(ValueError, match=error):
+        PixiOperator(task_id="t", python_callable=add, requirements=requirements)
+
+
+def test_requirements_alone_make_an_inline_manifest_with_the_workers_python(fake_pixi) -> None:
+    run(
+        make(fake_pixi, dependencies=None, requirements="pandas>=2\nrequests", op_args=[1], cleanup_temp_manifest=False)
+    )
+    manifest = parse_toml(Path(fake_pixi.calls[-1]["argv"][2]).read_text())
+    assert manifest["dependencies"] == {"python": f"{sys.version_info.major}.{sys.version_info.minor}.*"}
+    assert manifest["pypi-dependencies"] == {"pandas": ">=2", "requests": "*"}
+
+
+def test_requirements_are_templated(fake_pixi) -> None:
+    op = make(fake_pixi, requirements=["{{ params.package }}"], dependencies=None)
+    assert "requirements" in op.template_fields
+    op.render_template_fields({"params": {"package": "pandas==2.2"}})
+    assert op._pypi_dependencies() == {"pandas": "==2.2"}
+
+
+def test_requirements_and_pypi_dependencies_must_not_overlap(fake_pixi) -> None:
+    op = make(fake_pixi, pypi_dependencies={"Pandas": "*"}, requirements=["pandas"])
+    with pytest.raises(ValueError, match="both pypi_dependencies and requirements"):
+        run(op)
+
+
+def test_requirements_cannot_extend_a_project(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Exactly one of"):
+        PixiOperator(task_id="t", python_callable=add, pixi_project_path=str(tmp_path), requirements=["pandas"])
+
+
+def test_env_vars_reach_the_run_and_override_the_workers(fake_pixi, monkeypatch) -> None:
+    monkeypatch.setenv("PIXI_CACHE_DIR", "/worker")
+    op = make(
+        fake_pixi,
+        python_callable="os:getenv",
+        op_args=["MY_SECRET"],
+        env_vars={"MY_SECRET": "{{ not rendered }}", "PIXI_CACHE_DIR": "/task"},
+    )
+    assert "env_vars" not in op.template_fields
+    assert run(op) == "{{ not rendered }}"
+    assert fake_pixi.calls[-1]["env"]["PIXI_CACHE_DIR"] == "/task"
+
+
+def test_get_python_source_is_what_runs(fake_pixi) -> None:
+    class Negating(PixiOperator):
+        def get_python_source(self) -> str:
+            return (
+                super().get_python_source()
+                + "\n_add = add\n\ndef add(*args, **kwargs):\n    return -_add(*args, **kwargs)\n"
+            )
+
+    op = Negating(task_id="t", python_callable=add, op_args=[2, 3], pixi_binary=str(fake_pixi.path), **INLINE)
+    assert run(op) == -5
 
 
 def test_operator_init_requires_one_manifest_source() -> None:

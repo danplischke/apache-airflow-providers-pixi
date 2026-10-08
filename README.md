@@ -102,8 +102,8 @@ How it works:
 | `PixiOperator(task_id, python_callable, op_args=None, op_kwargs=None, ...)` | runs the callable in a Pixi environment |
 | `@task.pixi(...)` | TaskFlow variant of `PixiOperator` |
 
-Templated fields: `op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path` and the
-cache directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
+Templated fields: `op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`,
+`requirements` and the cache directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
 `pyproject.toml`; pixi uses exactly that file.
 
 ### Inline manifest options
@@ -111,7 +111,9 @@ cache directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
 - **Workspace:** `channels` (default `["conda-forge"]`), `platforms` (default `linux-64`,
   `osx-64`, `osx-arm64`, `win-64`), `name`
 - **Conda:** `dependencies` (dict, or list of MatchSpecs)
-- **PyPI:** `pypi_dependencies`, `pypi_options`
+- **PyPI:** `pypi_dependencies`, `requirements` (pip requirement strings, as for
+  `@task.virtualenv`), `pypi_options`. With PyPI packages but no `python` dependency, the
+  environment gets the worker's Python version.
 - **Multiple environments:** `environments` (dict), `feature` (dict of feature configs)
 
 Same structure as the [Pixi manifest](https://pixi.sh/dev/reference/pixi_manifest/).
@@ -121,6 +123,11 @@ afterwards (keep it for inspection with `cleanup_temp_manifest=False`). With
 `env_cache_path`, it lives in `<env_cache_path>/pixi-<hash of the manifest>` and later runs
 of the same manifest reuse it, like `venv_cache_path` of `PythonVirtualenvOperator`. Remove
 old directories there yourself; concurrent runs of one manifest are safe.
+
+### Environment variables
+
+The run inherits the worker's environment; `env_vars` adds to or overrides it. It is not
+templated, so secrets set there are never rendered into the UI.
 
 ### Timeouts and killing
 
@@ -153,6 +160,14 @@ Airflow UI or with `airflow variables set <name> <path>`:
 
 The Variables are read at task run time; a missing Variable leaves the env var unset, so
 the tool's default applies.
+
+## Building on this provider
+
+Other providers can build their own operators and task decorators on `PixiOperator` and
+`@task.pixi`, with the extension points of `@task.virtualenv` (`get_python_source()`,
+`op_kwargs`, `env_vars`, `requirements`), so a mixin written for `@task.virtualenv` usually works
+on `@task.pixi` unchanged. See
+[Building on the Pixi Operator](https://danplischke.github.io/apache-airflow-providers-pixi/extending/).
 
 ## Tests
 

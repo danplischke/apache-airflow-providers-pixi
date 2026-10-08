@@ -57,5 +57,6 @@ Like `@task.virtualenv`, the function's source is shipped to the environment and
   `serializer="pickle"`. See [Arguments and return values](../operators/pixi.md#arguments-and-return-values).
 
 Task decorators such as `@task.pixi`, `@setup`, `@teardown`, `@task.skip_if` and `@task.run_if` are
-removed from the shipped source. Line numbers are kept, so a traceback raised inside the environment
-points at the right line of the DAG file.
+removed from the shipped source, and so is the decorator of a provider that builds on `@task.pixi`
+(see [Building on the Pixi Operator](../extending.md)). Line numbers are kept, so a traceback raised
+inside the environment points at the right line of the DAG file.

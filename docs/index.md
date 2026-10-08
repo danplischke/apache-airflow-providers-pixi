@@ -17,6 +17,9 @@ This package is for the `pixi` provider. All classes for this provider package a
 | [`PixiOperator`](operators/pixi.md) | runs a Python callable in a Pixi environment |
 | [`@task.pixi`](decorators/pixi.md) | TaskFlow variant of `PixiOperator` |
 
+Other providers can build their own operators and decorators on these; see
+[Building on the Pixi Operator](extending.md).
+
 ## Installation
 
 You can install this package on top of an existing Airflow installation via

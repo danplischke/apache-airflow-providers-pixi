@@ -24,6 +24,7 @@ nav = [
   { "Guides" = [
     { "Pixi Operator" = "operators/pixi.md" },
     { "Pixi Task Decorator" = "decorators/pixi.md" },
+    { "Building on the Pixi Operator" = "extending.md" },
   ] },
   { "References" = [
     { "Python API" = "api.md" },
