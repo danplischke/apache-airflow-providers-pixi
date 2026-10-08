@@ -1,12 +1,14 @@
-# pixi-airflow
+# apache-airflow-providers-pixi
 
 Apache Airflow 3 provider to run Python callables inside [Pixi](https://pixi.sh)-managed
 environments: `PixiOperator` and the `@task.pixi` TaskFlow decorator.
 
+**Documentation:** https://danplischke.github.io/apache-airflow-providers-pixi/
+
 ## Installation
 
 ```bash
-pip install pixi-airflow
+pip install apache-airflow-providers-pixi
 ```
 
 Requires `apache-airflow>=3.0` and the [Pixi CLI](https://pixi.sh) on the workers (for
@@ -162,7 +164,7 @@ PIXI_INTEGRATION_TEST=1 pytest tests/integration   # real pixi on PATH, needs co
 export AIRFLOW_HOME=/tmp/airflow-e2e AIRFLOW__CORE__LOAD_EXAMPLES=False
 export AIRFLOW__CORE__DAGS_FOLDER=$PWD/tests/system/pixi
 airflow db migrate
-PIXI_E2E_TEST=1 pytest tests/system                # dag.test(): real task runner and pixi
+PIXI_E2E_TEST=1 pytest tests/system/pixi           # dag.test(): real task runner and pixi
 ```
 
 ## License

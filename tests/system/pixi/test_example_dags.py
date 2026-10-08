@@ -8,7 +8,7 @@ Requires pixi on PATH and a migrated Airflow metadata DB::
     export AIRFLOW_HOME=/tmp/airflow-e2e AIRFLOW__CORE__LOAD_EXAMPLES=False
     export AIRFLOW__CORE__DAGS_FOLDER=$PWD/tests/system/pixi  # dag.test() needs the DAG serialized
     airflow db migrate
-    PIXI_E2E_TEST=1 pytest tests/system
+    PIXI_E2E_TEST=1 pytest tests/system/pixi
 """
 
 from __future__ import annotations

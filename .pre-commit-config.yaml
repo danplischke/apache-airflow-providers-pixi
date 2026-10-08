@@ -16,12 +16,19 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.10
+  # ruff from uv.lock, so hooks and CI never run different versions
+  - repo: local
     hooks:
       - id: ruff-check
-        args: [--fix]
+        name: ruff check
+        entry: uv run --group dev ruff check --fix
+        language: system
+        types_or: [python, pyi]
       - id: ruff-format
+        name: ruff format
+        entry: uv run --group dev ruff format
+        language: system
+        types_or: [python, pyi]
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.12.23
