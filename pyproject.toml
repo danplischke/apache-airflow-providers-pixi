@@ -7,7 +7,7 @@ name = "apache-airflow-providers-pixi"
 version = "0.1.0"
 description = "Apache Airflow 3 provider to run Python callables in Pixi environments (PixiOperator and @task.pixi)."
 readme = "README.md"
-license = "Apache-2.0"
+license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Dan Plischke" }]
 keywords = ["airflow-provider", "pixi", "conda", "airflow", "integration"]

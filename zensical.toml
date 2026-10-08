@@ -9,7 +9,7 @@ repo_url = "https://github.com/danplischke/apache-airflow-providers-pixi"
 repo_name = "danplischke/apache-airflow-providers-pixi"
 edit_uri = "edit/main/docs/"
 copyright = """
-Copyright &copy; Dan Plischke. Licensed under the Apache License, Version 2.0.<br>
+Copyright &copy; Dan Plischke. Licensed under the MIT License.<br>
 Apache Airflow, Apache, Airflow and the Airflow logo are trademarks of The Apache Software Foundation.
 This project is not affiliated with or endorsed by The Apache Software Foundation.
 """
