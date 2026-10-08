@@ -27,7 +27,10 @@ from airflow.providers.pixi.utils.pixi import MIN_PIXI_VERSION
 from airflow.providers.pixi.utils.pixi import resolve_pixi as _resolve_pixi
 from airflow.providers.pixi.utils.source import function_source as _function_source
 
-tomllib = pytest.importorskip("tomllib") if sys.version_info >= (3, 11) else None
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    tomllib = pytest.importorskip("tomli")
 
 INLINE = {"dependencies": {"python": "3.12.*"}}
 
@@ -326,9 +329,7 @@ def test_build_pixi_toml_minimal() -> None:
         channels=["conda-forge"],
         platforms=["linux-64"],
     )
-    assert "[workspace]" in toml
-    assert 'channels = ["conda-forge"]' in toml
-    assert 'platforms = ["linux-64"]' in toml
+    assert parse_toml(toml) == {"workspace": {"channels": ["conda-forge"], "platforms": ["linux-64"]}}
 
 
 def test_build_pixi_toml_with_dependencies() -> None:
@@ -337,9 +338,7 @@ def test_build_pixi_toml_with_dependencies() -> None:
         platforms=["linux-64", "osx-64"],
         dependencies={"python": ">=3.10", "numpy": "*"},
     )
-    assert "[dependencies]" in toml
-    assert "python" in toml
-    assert "numpy" in toml
+    assert parse_toml(toml)["dependencies"] == {"python": ">=3.10", "numpy": "*"}
 
 
 def test_build_pixi_toml_with_pypi() -> None:
@@ -348,8 +347,7 @@ def test_build_pixi_toml_with_pypi() -> None:
         platforms=["linux-64"],
         pypi_dependencies={"pandas": ">=2.0"},
     )
-    assert "[pypi-dependencies]" in toml
-    assert "pandas" in toml
+    assert parse_toml(toml)["pypi-dependencies"] == {"pandas": ">=2.0"}
 
 
 def test_build_pixi_toml_with_environments() -> None:
@@ -358,14 +356,10 @@ def test_build_pixi_toml_with_environments() -> None:
         platforms=["linux-64"],
         environments={"test": ["test"], "cuda": ["cuda"]},
     )
-    assert "[environments]" in toml
-    assert "test" in toml
-    assert "cuda" in toml
+    assert parse_toml(toml)["environments"] == {"test": ["test"], "cuda": ["cuda"]}
 
 
 def parse_toml(text: str) -> dict:
-    if tomllib is None:
-        pytest.skip("tomllib needs Python 3.11")
     return tomllib.loads(text)
 
 
@@ -445,7 +439,7 @@ def test_requirements_are_templated(fake_pixi) -> None:
     op = make(fake_pixi, requirements=["{{ params.package }}"], dependencies=None)
     assert "requirements" in op.template_fields
     op.render_template_fields({"params": {"package": "pandas==2.2"}})
-    assert '[pypi-dependencies]\n"pandas" = "==2.2"' in op.inline_manifest_toml()
+    assert parse_toml(op.inline_manifest_toml())["pypi-dependencies"] == {"pandas": "==2.2"}
 
 
 def test_requirements_and_pypi_dependencies_must_not_overlap(fake_pixi) -> None:

@@ -67,7 +67,7 @@ def test_pod_runs_the_function_in_an_inline_environment(fake_pixi, tmp_path: Pat
     assert xcom(tmp_path) == 5
     call = fake_pixi.calls[-1]
     assert call["argv"][3:5] == ["--environment", "test"]
-    assert '"pandas" = "*"' in Path(call["argv"][2]).read_text()
+    assert 'pandas = "*"' in Path(call["argv"][2]).read_text()
 
 
 def test_pod_reuses_an_inline_environment_in_env_cache_path(fake_pixi, tmp_path: Path) -> None:
