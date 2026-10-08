@@ -243,4 +243,3 @@ cython_debug/
 
 # pixi environments, created next to a manifest
 .pixi/
-

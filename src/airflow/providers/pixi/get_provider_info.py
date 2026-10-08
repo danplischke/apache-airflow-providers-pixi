@@ -16,10 +16,10 @@ def get_provider_info() -> dict[str, object]:
         "operators": [
             {
                 "integration-name": "Pixi",
-                "python-modules": ["pixi_airflow.operators.pixi"],
+                "python-modules": ["airflow.providers.pixi.operators.pixi"],
             }
         ],
         "task-decorators": [
-            {"name": "pixi", "class-name": "pixi_airflow.decorators.pixi.pixi_task"},
+            {"name": "pixi", "class-name": "airflow.providers.pixi.decorators.pixi.pixi_task"},
         ],
     }

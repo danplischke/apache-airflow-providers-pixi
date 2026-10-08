@@ -30,6 +30,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pre-commit>=3.5",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "ruff>=0.8",
@@ -40,10 +41,10 @@ dev = [
 "Bug Tracker" = "https://github.com/danplischke/apache-airflow-providers-pixi/issues"
 
 [project.entry-points."apache_airflow_provider"]
-provider_info = "pixi_airflow.get_provider_info:get_provider_info"
+provider_info = "airflow.providers.pixi.get_provider_info:get_provider_info"
 
 [tool.flit.module]
-name = "pixi_airflow"
+name = "airflow.providers.pixi"
 
 [tool.flit.sdist]
 include = [

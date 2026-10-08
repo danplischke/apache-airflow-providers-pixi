@@ -72,7 +72,7 @@ jobs:
         run: uv sync --locked --group dev --python ${{ matrix.python-version }}
 
       - name: Run unit tests with coverage
-        run: uv run pytest tests/unit -v --cov=pixi_airflow --cov-report=xml --cov-report=term-missing
+        run: uv run pytest tests/unit -v --cov=airflow.providers.pixi --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
@@ -103,8 +103,8 @@ jobs:
 
       - name: Smoke import
         run: |
-          uv run --no-sync python -c "import pixi_airflow; print('import OK')"
-          uv run --no-sync python -c "from pixi_airflow.get_provider_info import get_provider_info; get_provider_info(); print('provider info OK')"
+          uv run --no-sync python -c "import airflow.providers.pixi; print('import OK')"
+          uv run --no-sync python -c "from airflow.providers.pixi.get_provider_info import get_provider_info; get_provider_info(); print('provider info OK')"
           uv run --no-sync python -c "from airflow.sdk import task; assert hasattr(task, 'pixi'); print('@task.pixi registered')"
 
   integration-test:
@@ -166,14 +166,14 @@ jobs:
         env:
           AIRFLOW_HOME: ${{ runner.temp }}/airflow
           AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system/pixi
         run: uv run --no-sync airflow db migrate
 
       - name: Run system tests
         env:
           AIRFLOW_HOME: ${{ runner.temp }}/airflow
           AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system/pixi
           PIXI_E2E_TEST: "1"
         run: uv run --no-sync pytest tests/system -v
 
