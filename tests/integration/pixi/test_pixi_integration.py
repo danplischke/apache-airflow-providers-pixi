@@ -22,7 +22,7 @@ from airflow.sdk import dag, task
 from airflow.sdk.exceptions import AirflowTaskTimeout
 from airflow.sdk.execution_time.timeout import timeout
 
-from pixi_airflow.operators.pixi import PixiOperator
+from airflow.providers.pixi.operators.pixi import PixiOperator
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("PIXI_INTEGRATION_TEST") != "1",

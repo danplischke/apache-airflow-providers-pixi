@@ -17,7 +17,12 @@ from airflow.sdk import DAG, dag, setup, task
 from airflow.sdk.exceptions import AirflowTaskTimeout
 from airflow.sdk.execution_time.timeout import timeout
 
-from pixi_airflow.operators.pixi import PixiOperator, _build_pixi_toml, _ensure_pixi_available, _function_source
+from airflow.providers.pixi.operators.pixi import (
+    PixiOperator,
+    _build_pixi_toml,
+    _ensure_pixi_available,
+    _function_source,
+)
 
 INLINE = {"dependencies": {"python": "3.12.*"}}
 
@@ -57,7 +62,7 @@ def assert_stopped(beat: Path, started: float) -> None:
 
 
 def test_package_exports_operator() -> None:
-    import pixi_airflow
+    import airflow.providers.pixi as pixi_airflow
 
     assert pixi_airflow.PixiOperator is PixiOperator
 
@@ -250,7 +255,7 @@ def test_cache_dir_variables_are_set_in_the_environment(fake_pixi) -> None:
         uv_cache_dir_variable="uv_cache",
         pip_cache_dir_variable="pip_cache",
     )
-    with patch("pixi_airflow.operators.pixi.Variable.get", side_effect=lambda key, default=None: values[key]):
+    with patch("airflow.providers.pixi.operators.pixi.Variable.get", side_effect=lambda key, default=None: values[key]):
         run(op)
     env = fake_pixi.calls[-1]["env"]
     assert env["PIXI_CACHE_DIR"] == "/shared/pixi"
@@ -377,7 +382,7 @@ def test_operator_init_requires_one_manifest_source() -> None:
 
 def test_ensure_pixi_available_uses_which_when_found() -> None:
     """When pixi is on PATH, _ensure_pixi_available returns it without installing."""
-    with patch("pixi_airflow.operators.pixi.shutil.which") as m_which:
+    with patch("airflow.providers.pixi.operators.pixi.shutil.which") as m_which:
         m_which.return_value = "/usr/local/bin/pixi"
         path = _ensure_pixi_available("pixi", auto_install=True)
     assert path == "/usr/local/bin/pixi"
@@ -387,7 +392,7 @@ def test_ensure_pixi_available_uses_which_when_found() -> None:
 def test_ensure_pixi_available_raises_when_not_found_and_no_auto_install() -> None:
     """When pixi not on PATH and auto_install=False, raises AirflowException."""
     with (
-        patch("pixi_airflow.operators.pixi.shutil.which", return_value=None),
+        patch("airflow.providers.pixi.operators.pixi.shutil.which", return_value=None),
         pytest.raises(AirflowException, match="not found on PATH"),
     ):
         _ensure_pixi_available("pixi", auto_install=False)

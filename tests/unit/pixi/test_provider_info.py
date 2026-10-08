@@ -9,9 +9,9 @@ from pathlib import Path
 import jsonschema
 import yaml
 
-from pixi_airflow.get_provider_info import get_provider_info
+from airflow.providers.pixi.get_provider_info import get_provider_info
 
-PROVIDER_YAML = Path(__file__).parents[2] / "provider.yaml"
+PROVIDER_YAML = Path(__file__).parents[3] / "provider.yaml"
 
 
 def test_provider_info_matches_provider_yaml() -> None:

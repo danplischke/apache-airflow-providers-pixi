@@ -2,7 +2,7 @@
 
 from airflow.sdk import DAG, task
 
-from pixi_airflow.operators.pixi import PixiOperator
+from airflow.providers.pixi.operators.pixi import PixiOperator
 
 ENV = {"dependencies": {"python": "3.12.*"}}
 

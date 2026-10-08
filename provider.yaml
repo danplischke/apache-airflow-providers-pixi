@@ -15,8 +15,8 @@ integrations:
 operators:
   - integration-name: Pixi
     python-modules:
-      - pixi_airflow.operators.pixi
+      - airflow.providers.pixi.operators.pixi
 
 task-decorators:
   - name: pixi
-    class-name: pixi_airflow.decorators.pixi.pixi_task
+    class-name: airflow.providers.pixi.decorators.pixi.pixi_task

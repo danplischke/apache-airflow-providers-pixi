@@ -18,7 +18,7 @@ official install script unless you pass `auto_install_pixi=False`.
 ```python
 from airflow.sdk import DAG
 
-from pixi_airflow import PixiOperator
+from airflow.providers.pixi import PixiOperator
 
 with DAG("my_pipeline") as dag:
     # existing Pixi project: a directory with pixi.toml or pyproject.toml
@@ -160,7 +160,7 @@ pytest tests/unit                                  # a fake pixi runs the comman
 PIXI_INTEGRATION_TEST=1 pytest tests/integration   # real pixi on PATH, needs conda-forge access
 
 export AIRFLOW_HOME=/tmp/airflow-e2e AIRFLOW__CORE__LOAD_EXAMPLES=False
-export AIRFLOW__CORE__DAGS_FOLDER=$PWD/tests/system
+export AIRFLOW__CORE__DAGS_FOLDER=$PWD/tests/system/pixi
 airflow db migrate
 PIXI_E2E_TEST=1 pytest tests/system                # dag.test(): real task runner and pixi
 ```
