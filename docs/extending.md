@@ -3,8 +3,9 @@
 Other providers can build their own operators and task decorators on `PixiOperator` and `@task.pixi`,
 to run something around the user's function inside the Pixi environment: lineage tracking,
 credentials, logging, and so on. The extension points are the ones `@task.virtualenv` has, except
-that packages are added with `add_pypi_dependencies()` instead of appending to `requirements`, so a
-mixin written for `@task.virtualenv` ports to `@task.pixi` with that one change.
+that packages are added with `add_pypi_dependencies()` instead of appending to `requirements`. A
+mixin written for `@task.virtualenv` ports to `@task.pixi` by replacing the code that appends to
+`requirements` with a call to `add_pypi_dependencies()`; the rest of the mixin carries over.
 
 ## Extension points
 
@@ -125,19 +126,30 @@ class StartRunOperator(PixiOperator):
 ## Porting a `@task.virtualenv` wrapper
 
 A mixin that wraps `_PythonVirtualenvDecoratedOperator` through the members above works when it is put
-in front of `PixiDecoratedOperator` instead. The one change is where it adds packages: a virtualenv
-operator's `requirements` list becomes a call to `add_pypi_dependencies`. For example, lamindb-airflow's
-`RemoteLaminDBStepMixin` runs as a `@task.lamindb_pixi` step:
+in front of `PixiDecoratedOperator` instead. What changes is where it adds packages: code that edits a
+virtualenv operator's `requirements` list needs a Pixi counterpart that calls `add_pypi_dependencies`.
+For example, lamindb-airflow's `RemoteLaminDBStepMixin` runs as a `@task.lamindb_pixi` step:
 
 ```python
 from contextlib import contextmanager
 
 from airflow.providers.lamindb.utils.remote import (
     RemoteLaminDBStepMixin,
-    ensure_lamindb_requirement,
+    add_lamindb_requirement,
+    lamindb_requirement_lines,
     lamindb_virtualenv_env,
 )
 from airflow.providers.pixi.decorators.pixi import PixiDecoratedOperator
+from airflow.providers.pixi.utils.manifest import pypi_dependencies_table
+
+
+def ensure_lamindb_pypi_dependency(operator, remote, lamindb_version):
+    listed = list(pypi_dependencies_table(operator.pypi_dependencies))
+    requirements = list(listed)
+    if not lamindb_requirement_lines(requirements):
+        lamindb_version = lamindb_version or remote.instance_lamindb_version()
+    add_lamindb_requirement(requirements, lamindb_version)
+    operator.add_pypi_dependencies(*requirements[len(listed):])
 
 
 class LaminDBPixiDecoratedOperator(RemoteLaminDBStepMixin, PixiDecoratedOperator):
@@ -151,27 +163,17 @@ class LaminDBPixiDecoratedOperator(RemoteLaminDBStepMixin, PixiDecoratedOperator
     @contextmanager
     def _lamindb_environment(self, remote):
         if self.inline_manifest:  # a project environment brings lamindb itself, like a pod image
-            ensure_lamindb_requirement(self, remote, self.lamindb_version)
+            ensure_lamindb_pypi_dependency(self, remote, self.lamindb_version)
         with lamindb_virtualenv_env(self, remote):
             yield
 ```
 
-Its helper `ensure_lamindb_requirement` reads the listed packages from `operator.requirements` and assigns
-the list back. For a Pixi operator, it reads their names from
-[`pypi_dependencies_table`][airflow.providers.pixi.utils.manifest.pypi_dependencies_table], which takes
-either form of `pypi_dependencies`, and passes what it adds to `add_pypi_dependencies`:
-
-```diff
- def ensure_lamindb_requirement(operator, remote, lamindb_version):
--    requirements = list(operator.requirements)
-+    listed = list(pypi_dependencies_table(operator.pypi_dependencies))
-+    requirements = list(listed)
-     if not lamindb_requirement_lines(requirements):
-         lamindb_version = lamindb_version or remote.instance_lamindb_version()
-     add_lamindb_requirement(requirements, lamindb_version)
--    operator.requirements = requirements
-+    operator.add_pypi_dependencies(*requirements[len(listed):])
-```
+`ensure_lamindb_pypi_dependency` is the Pixi counterpart of lamindb-airflow's `ensure_lamindb_requirement`,
+which reads `operator.requirements` and assigns the list back. That helper stays as it is for the virtualenv
+decorator and the flow operators, which have no `pypi_dependencies`. The Pixi one reads the listed names
+with [`pypi_dependencies_table`][airflow.providers.pixi.utils.manifest.pypi_dependencies_table], which
+takes either form of `pypi_dependencies`, runs the same lamindb checks on a copy, and passes only what
+`add_lamindb_requirement` appended to `add_pypi_dependencies`.
 
 Differences to keep in mind:
 

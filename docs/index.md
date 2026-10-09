@@ -1,8 +1,6 @@
-# `apache-airflow-providers-pixi`
+# apache-airflow-providers-pixi
 
 ## apache-airflow-providers-pixi package
-
-[Pixi](https://pixi.sh)
 
 Run Python callables inside [Pixi](https://pixi.sh)-managed environments, so a task can use
 packages from conda-forge and PyPI that are not installed on the Airflow worker.
@@ -31,10 +29,15 @@ Other providers can build their own operators and decorators on these; see
 
 ## Installation
 
-You can install this package on top of an existing Airflow installation via
-`pip install apache-airflow-providers-pixi`, or
-`pip install "apache-airflow-providers-pixi[cncf.kubernetes]"` for the Kubernetes pod operator. For the minimum Airflow version supported, see
-[Requirements](#requirements) below.
+Install it on top of an existing Airflow installation:
+
+```bash
+pip install apache-airflow-providers-pixi
+pip install "apache-airflow-providers-pixi[cncf.kubernetes]"
+```
+
+The `cncf.kubernetes` extra adds the Kubernetes pod operator. For the minimum Airflow version
+supported, see [Requirements](#requirements) below.
 
 The workers also need [Pixi](https://pixi.sh/latest/installation/), installed for example in the
 worker image. The provider never installs it; see [Pixi binary](operators/pixi.md#pixi-binary) and the
