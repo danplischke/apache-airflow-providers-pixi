@@ -5,7 +5,7 @@ description: |
   Run Python callables inside `Pixi <https://pixi.sh>`__ environments.
 
 versions:
-  - 0.1.0
+  - 0.0.1
 
 integrations:
   - integration-name: Pixi
