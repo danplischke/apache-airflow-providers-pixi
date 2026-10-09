@@ -14,10 +14,10 @@ import shlex
 from collections.abc import Mapping, Sequence
 from typing import Any, ClassVar
 
-from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
-from airflow.providers.cncf.kubernetes.utils.xcom_sidecar import PodDefaults
 from kubernetes.client import models as k8s
 
+from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
+from airflow.providers.cncf.kubernetes.utils.xcom_sidecar import PodDefaults
 from airflow.providers.pixi.exceptions import PixiCallableError
 from airflow.providers.pixi.operators.pixi import BasePixiPythonOperator
 from airflow.providers.pixi.runtime.runner import TERMINATION_KEY, TERMINATION_LOG_ENV

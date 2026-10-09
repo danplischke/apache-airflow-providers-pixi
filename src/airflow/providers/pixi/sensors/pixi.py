@@ -5,9 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from airflow.sdk import BaseSensorOperator, PokeReturnValue
-
 from airflow.providers.pixi.operators.pixi import BasePixiPythonOperator, PixiSubprocessMixin
+from airflow.sdk import BaseSensorOperator, PokeReturnValue
 
 _POKE_RESULT_KEYS = {"is_done", "xcom_value"}
 

@@ -9,9 +9,8 @@ from typing import Any
 
 @functools.cache
 def _decorated_operator_class() -> type:
-    from airflow.sdk.bases.decorator import DecoratedOperator
-
     from airflow.providers.pixi.operators.kubernetes import PixiKubernetesPodOperator
+    from airflow.sdk.bases.decorator import DecoratedOperator
 
     class PixiKubernetesDecoratedOperator(DecoratedOperator, PixiKubernetesPodOperator):  # type: ignore[misc]
         """``@task.pixi_kubernetes``: run the function inside a Pixi environment in a Kubernetes pod."""
