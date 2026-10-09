@@ -62,6 +62,12 @@ The callable and everything it starts can read these environment variables and f
 and so can anything else running as the worker's user. Masking applies to the task log, including
 what the callable prints; a value the callable writes anywhere else is not masked.
 
-Credentials embedded in a manifest, such as an index URL with a password in `pypi_options`, end up in
-the `pixi.toml` that is written to disk and kept in `env_cache_path`. Use a `pixi` connection with
-`auth_type` `netrc` instead.
+Credentials embedded in a manifest, such as an index URL with a password in the `[pypi-options]` of
+a project's `pixi.toml`, are readable by anyone who can read the project, and end up in images and
+DAG bundles that ship it. Keep the index URL in `[pypi-options]` without credentials and use a `pixi`
+connection with `auth_type` `netrc` instead.
+
+Credentials in an inline manifest, such as a token in a `channels` URL or in a URL or git requirement
+of `pypi_dependencies`, are written into the generated `pixi.toml`, which stays in
+`env_cache_path` when it is set, and for a pod are also in the pod spec. Keep them out of the URL and
+use a `pixi` connection with `auth_type` `conda_token` or `netrc` instead.

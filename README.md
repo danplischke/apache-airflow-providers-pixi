@@ -51,7 +51,7 @@ with DAG("my_pipeline") as dag:
         python_callable="mymodule:evaluate",
     )
 
-    # inline manifest, same options as pixi.toml; env_cache_path keeps the environment for later runs
+    # inline manifest: a list of packages; env_cache_path keeps the environment for later runs
     report = PixiOperator(
         task_id="report",
         dependencies={"python": ">=3.10", "numpy": "*"},
@@ -125,14 +125,14 @@ PixiBashOperator(
 )
 
 
-@task.pixi_kubernetes(image="ghcr.io/prefix-dev/pixi:0.81.0", requirements=["pandas", "pyarrow"], namespace="jobs")
+@task.pixi_kubernetes(image="ghcr.io/prefix-dev/pixi:0.81.0", pypi_dependencies=["pandas", "pyarrow"], namespace="jobs")
 def summarize(path: str) -> dict:
     import pandas as pd
 
     return pd.read_parquet(path).describe().to_dict()
 
 
-@task.pixi_sensor(requirements=["s3fs"], poke_interval=60, mode="reschedule", env_cache_path="/var/cache/pixi-airflow")
+@task.pixi_sensor(pypi_dependencies=["s3fs"], poke_interval=60, mode="reschedule", env_cache_path="/var/cache/pixi-airflow")
 def landed(path: str) -> bool:
     import s3fs
 
@@ -152,23 +152,22 @@ def landed(path: str) -> bool:
 | `PixiSensor` / `@task.pixi_sensor` | waits for a Python callable, run in a Pixi environment, to return a truthy value |
 
 All of them choose the environment the same way (below). Templated fields: `op_args`,
-`op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `lock_mode`, `requirements` and
+`op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `lock_mode`, `pypi_dependencies` and
 the cache directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
 `pyproject.toml`; pixi uses exactly that file.
 
 ### Inline manifest options
 
-- **Workspace:** `channels` (default `["conda-forge"]`), `platforms` (default: the platform of the
-  machine running pixi; `linux-64` and `linux-aarch64` in a pod), `workspace_name`
 - **Conda:** `dependencies` (dict, or list of MatchSpecs)
-- **PyPI:** `pypi_dependencies`, `requirements` (pip requirement strings, as for
-  `@task.virtualenv`), `pypi_options`. With PyPI packages but no `python` dependency, the
-  environment gets the worker's Python version.
-- **Multiple environments:** `environments` (dict), `feature` (dict of feature configs)
+- **PyPI:** `pypi_dependencies`, a dict as under `[pypi-dependencies]`, or pip requirement strings as
+  for `@task.virtualenv` (a list, or one string such as a rendered requirements file). With PyPI
+  packages but no `python` dependency, the environment gets the worker's Python version.
+- **Workspace:** `channels` (default `["conda-forge"]`), `platforms` (default: the platform of the
+  machine running pixi; `linux-64` and `linux-aarch64` in a pod)
 
-Same structure as the [Pixi manifest](https://pixi.sh/dev/reference/pixi_manifest/), and checked
-against its schema for pixi 0.81.0 when the DAG is parsed: a misspelled key raises `ValueError`
-naming it. Pass `validate_manifest=False` for keys only a newer pixi on the workers knows.
+Anything beyond a list of packages, such as PyPI indexes (`[pypi-options]`), features or several
+environments, goes in a [`pixi.toml`](https://pixi.sh/latest/reference/pixi_manifest/) passed as
+`pixi_project_path` or `pixi_toml_path`.
 
 By default an inline environment is built in a temporary directory for each run and removed
 afterwards (keep it for inspection with `cleanup_temp_manifest=False`). With
@@ -194,8 +193,9 @@ task is killed, the operator stops pixi and every process it started.
 
 ### Environment
 
-If the manifest defines several environments (for example `default`, `test` and `cuda`
-under `[environments]`), set `environment` to the one to use. Omit it for Pixi's default.
+If a project or manifest file defines several environments (for example `default`, `test` and
+`cuda` under `[environments]`), set `environment` to the one to use. Omit it for Pixi's default.
+An inline manifest has only the default environment and rejects `environment`.
 
 ### Pixi binary
 
@@ -222,8 +222,8 @@ the tool's default applies.
 
 Other providers can build their own operators and task decorators on `PixiOperator` and
 `@task.pixi`, with the extension points of `@task.virtualenv` (`get_python_source()`,
-`op_kwargs`, `env_vars`, `requirements`), so a mixin written for `@task.virtualenv` usually works
-on `@task.pixi` unchanged. See
+`op_kwargs`, `env_vars`), plus `add_pypi_dependencies()` in place of appending to `requirements`, so a
+mixin written for `@task.virtualenv` ports to `@task.pixi` with that one change. See
 [Building on the Pixi Operator](https://danplischke.github.io/apache-airflow-providers-pixi/extending/).
 
 ## Tests

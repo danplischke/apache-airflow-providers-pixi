@@ -32,7 +32,7 @@ PixiBashOperator(
 - **Working directory:** `cwd` defaults to the manifest's directory, so paths relative to the
   project work. Set `cwd` to run somewhere else.
 - **Environment:** a predefined one with `pixi_project_path` or `pixi_toml_path` and `environment`,
-  or one defined in the DAG with `dependencies`, `pypi_dependencies` and `requirements`. `environment`
+  or one defined in the DAG with `dependencies` and `pypi_dependencies`. `environment`
   is templated, so it can be chosen per run. `lock_mode` works as for the
   [Pixi Operator](pixi.md#the-lock-file), and relative paths are relative to the DAG file
   ([Relative paths](pixi.md#relative-paths)).
@@ -111,7 +111,7 @@ It accepts every `PixiBashOperator` argument.
 ## Templated fields
 
 `bash_command`, `env`, `cwd`, `pixi_project_path`, `pixi_toml_path`, `environment`, `lock_mode`,
-`requirements`, `pixi_cache_dir_variable`, `uv_cache_dir_variable` and `pip_cache_dir_variable`.
+`pypi_dependencies`, `pixi_cache_dir_variable`, `uv_cache_dir_variable` and `pip_cache_dir_variable`.
 `env_vars`, `env_from_variables`, `env_from_connections` and `pixi_conn_id` are not templated.
 
 ## Reference

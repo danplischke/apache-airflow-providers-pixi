@@ -12,7 +12,7 @@ The decorator is registered on Airflow's `task` object once the provider is inst
     Defaults to `False`.
 
 The environment is chosen the same way as for the operator: exactly one of `pixi_project_path`,
-`pixi_toml_path`, or an inline manifest (`dependencies` / `pypi_dependencies` / `requirements`). See
+`pixi_toml_path`, or an inline manifest (`dependencies` / `pypi_dependencies`). See
 [Choosing the environment](../operators/pixi.md#choosing-the-environment). A relative project path is
 relative to the DAG file, and `lock_mode="locked"` installs a project from its `pixi.lock` without
 updating it.
@@ -65,7 +65,7 @@ Like `@task.virtualenv`, the function's source is shipped to the environment and
   function:
 
     ```python
-    @task.pixi(requirements=["pandas", "pyarrow"])
+    @task.pixi(pypi_dependencies=["pandas", "pyarrow"])
     def report(table: str, ds=None, params=None) -> int:
         import pandas as pd
 

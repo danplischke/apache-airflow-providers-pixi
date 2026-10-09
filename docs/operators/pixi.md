@@ -65,8 +65,7 @@ otherwise.
 
 === "Inline manifest"
 
-    `dependencies` (conda), `pypi_dependencies` and/or `requirements` describe the environment
-    directly in the DAG.
+    `dependencies` (conda) and/or `pypi_dependencies` describe the environment directly in the DAG.
 
     ```python
     PixiOperator(
@@ -140,75 +139,52 @@ the same effect as the flags.
 
 ### Inline manifest options
 
-The inline options have the same structure as the
-[Pixi manifest](https://pixi.sh/latest/reference/pixi_manifest/):
+An inline manifest is a list of packages. The provider writes it as a `pixi.toml` with these
+sections:
 
 | Parameter | Manifest section | Default |
 |---|---|---|
+| `dependencies` | `[dependencies]`, as a dict or a list of MatchSpecs such as `"numpy>=2"` or `"conda-forge::scipy"` | |
+| `pypi_dependencies` | `[pypi-dependencies]`, as a dict as in `pixi.toml`, or from pip requirement strings | |
 | `channels` | `[workspace] channels` | `["conda-forge"]` |
-| `platforms` | `[workspace] platforms` | the platform of the machine that runs pixi, such as `linux-64` |
-| `workspace_name` | `[workspace] name` | |
-| `dependencies` | `[dependencies]`, as a dict or a list of MatchSpecs | |
-| `pypi_dependencies` | `[pypi-dependencies]` | |
-| `requirements` | `[pypi-dependencies]`, from pip requirement strings | |
-| `pypi_options` | `[pypi-options]` | |
-| `feature` | `[feature.<name>]`: a dict of features, each a table as in `pixi.toml`; `dependencies` may be a list of MatchSpecs, and `pypi_dependencies` stands for `pypi-dependencies` | |
-| `environments` | `[environments]` | |
+| `platforms` | `[workspace] platforms` | the platform of the machine that runs pixi, such as `linux-64`; `linux-64` and `linux-aarch64` in a [pod](kubernetes.md) |
+| anything else | PyPI indexes (`[pypi-options]`), features, several environments, tasks, system requirements | not inline: write a `pixi.toml` and pass `pixi_project_path` or `pixi_toml_path` |
 
-Keys inside these dicts are written as `pixi.toml` spells them, with hyphens: `pypi_options={"index-url": ...}`,
-`environments={"cuda": {"features": ["cuda"], "solve-group": "default"}}`.
+A MatchSpec in `dependencies` is `[channel::]name [version [build]]`, such as `"numpy>=2"`,
+`"conda-forge::scipy"` or `"pytorch 2.* cuda*"`. When the DAG is parsed, a string in place of the list
+raises `TypeError`, and a MatchSpec of another form, such as `numpy[version=">=2"]`, or a package listed
+twice raises `ValueError`; write other keys of a dependency with the dict form. Pixi checks the version
+and build strings, and the rest of the manifest, when it solves the environment on the worker.
 
-### Manifest validation
+### PyPI dependencies
 
-An inline manifest is checked against Pixi's
-[manifest schema](https://pixi.sh/latest/reference/pixi_manifest/) for pixi 0.81.0, the oldest version
-the provider supports. A misspelled key or a value of the wrong type raises `ValueError` when the DAG
-is parsed, so it shows up as an import error instead of a failed solve on the worker:
+`pypi_dependencies` takes the dict of `[pypi-dependencies]` in a `pixi.toml`, or pip requirement
+strings as `@task.virtualenv` takes them: a list, or one string that may hold several lines, such as a
+requirements file rendered from a template. Both forms end up in `[pypi-dependencies]`:
 
 ```python
 PixiOperator(
     task_id="report",
-    dependencies={"python": "3.12.*"},
-    pypi_options={"index_url": "https://pypi.example/simple"},  # should be "index-url"
-    python_callable="mymodule:report",
+    pypi_dependencies={"pandas": ">=2", "torch": {"version": ">=2", "extras": ["cuda"]}},
+    python_callable=report,
 )
-```
 
-```text
-ValueError: invalid inline pixi manifest at pypi-options: Additional properties are not allowed
-('index_url' was unexpected). The manifest follows the schema of pixi 0.81.0; pass
-validate_manifest=False for keys only a newer pixi on the workers knows
-```
-
-The message names the place as a TOML key, such as `environments.gpu` or `dependencies."ruamel.yaml"`,
-and what is wrong there. It leaves out the value itself, since an index URL can hold a password.
-
-`requirements` and the default platforms are added when the task runs, after templates are rendered,
-and the whole manifest is checked again then. Manifests from `pixi_project_path` or `pixi_toml_path`
-are not checked; pixi reads them as they are.
-
-If the workers run a newer pixi and the manifest uses a key that pixi 0.81.0 doesn't know, pass
-`validate_manifest=False`. The manifest is then written as given, and pixi reports any mistakes when it
-solves the environment.
-
-### Pip requirements
-
-`requirements` takes pip requirement strings, as `@task.virtualenv` does, and adds them to
-`[pypi-dependencies]`. An element may hold several lines, such as a requirements file rendered from a
-template:
-
-```python
 PixiOperator(
     task_id="report",
-    requirements=["pandas>=2", "mylib @ git+https://github.com/org/mylib@v1.2"],
+    pypi_dependencies=["pandas>=2", "mylib @ git+https://github.com/org/mylib@v1.2"],
     python_callable=report,
 )
 ```
 
-Versions, extras, git and URL requirements are supported. Pip options such as `-r` or `--index-url`
-are not: use `pypi_options` for indexes. If an inline manifest has PyPI packages but no `python`
-dependency, it gets the worker's Python version, as a virtualenv would. `requirements` can't extend a
-project or manifest file; add the packages to that manifest instead.
+In pip strings, versions, extras, git and URL requirements are supported, and blank lines and comments
+are skipped. Pip options such as `-r` or `--index-url` are not: set indexes under `[pypi-options]` in a
+`pixi.toml` and use `pixi_project_path` or `pixi_toml_path`. Environment markers and a package listed
+twice are rejected too. `pypi_dependencies` is templated; without templates it is checked when the DAG
+is parsed, otherwise when the task runs.
+
+If an inline manifest has PyPI packages but no `python` dependency, it gets the worker's Python
+version, as a virtualenv would. `pypi_dependencies` can't extend a project or manifest file; add the
+packages to that manifest instead.
 
 ### Platforms
 
@@ -245,10 +221,12 @@ up yourself.
 
 ### Multiple environments
 
-If the manifest defines several environments, for example `default`, `test` and `cuda` under
-`[environments]`, set `environment` to the one to use. Omit it for Pixi's default environment.
+If a project or manifest file defines several environments, for example `default`, `test` and `cuda`
+under `[environments]`, set `environment` to the one to use. Omit it for Pixi's default environment.
 `environment` is templated, so it can be chosen at run time, for example
-`environment="{{ params.env }}"`.
+`environment="{{ params.env }}"`. An inline manifest has only the default environment, so it rejects
+`environment`: with `ValueError` when the DAG is parsed, or with `AirflowException` before pixi runs
+when a template renders to a name.
 
 ## Arguments and return values
 
@@ -324,9 +302,12 @@ pixi run --manifest-path <manifest> [--environment <env>] [--locked | --frozen] 
     python -c <runner> <serializer> <input> <output>
 ```
 
-with the manifest's directory as working directory. The runner reads the callable, its arguments
-and the [context](#airflow-context) from the input file, calls it, and writes the return value to
-the output file, so stdout and stderr stay free for the task log.
+with the manifest's directory as working directory. The runner is the source of
+[`airflow.providers.pixi.runtime.runner`][airflow.providers.pixi.runtime.runner], which uses only the
+standard library, so the environment needs Python 3.10 or newer but neither Airflow nor this provider. It
+reads the callable, its arguments and the [context](#airflow-context) from the input file, calls it,
+awaiting it if it is a coroutine function, and writes the return value to the output file, so stdout
+and stderr stay free for the task log.
 
 ```mermaid
 sequenceDiagram
@@ -469,7 +450,8 @@ airflow.providers.pixi.exceptions.PixiCallableError: train raised ValueError: no
 
 The exception also has `callable_name`, `error_type`, `error_message` and `traceback` attributes, for
 `on_failure_callback`. A `"module.path:callable_name"` that cannot be imported fails the same way, with
-`ModuleNotFoundError` or `AttributeError`.
+`ModuleNotFoundError` or `AttributeError`. An environment whose Python is older than 3.10 fails the same
+way, with `RuntimeError`, before the callable is loaded.
 
 When pixi fails before the callable runs, for example because the environment cannot be solved or
 installed, the task fails with pixi's exit code and the last lines of output:
@@ -554,7 +536,7 @@ unset, so the tool's default applies. To share caches between workers, see the
 ## Templated fields
 
 `op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `lock_mode`,
-`requirements`, `pixi_cache_dir_variable`, `uv_cache_dir_variable` and `pip_cache_dir_variable`.
+`pypi_dependencies`, `pixi_cache_dir_variable`, `uv_cache_dir_variable` and `pip_cache_dir_variable`.
 `env_vars`, `env_from_variables`, `env_from_connections` and `pixi_conn_id` are not templated.
 
 The environment arguments of this page (`pixi_project_path`, `pixi_toml_path`, `environment`,

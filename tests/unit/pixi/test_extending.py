@@ -1,7 +1,7 @@
 """Building on PixiOperator and @task.pixi, as other providers do.
 
 The wrappers here follow lamindb-airflow's ``@task.lamindb_venv``: a mixin rewrites the shipped source so a
-runtime wraps the user function, and sets ``env_vars`` and ``requirements`` while executing.
+runtime wraps the user function, and sets ``env_vars`` and adds a PyPI package while executing.
 """
 
 from __future__ import annotations
@@ -46,15 +46,15 @@ class WrappingMixin:
         self.tag = tag
 
     def execute(self, context: Any) -> Any:
-        env_vars, requirements = self.env_vars, self.requirements
+        env_vars, pypi_dependencies = self.env_vars, self.pypi_dependencies
         self._wrapper_config = {"label": self.tag}
         self.env_vars = {"WRAPPER_TOKEN": "secret", **(env_vars or {})}
         if self.inline_manifest:
-            self.requirements = [*requirements, "wrapper-runtime>=1"]
+            self.add_pypi_dependencies("wrapper-runtime>=1")
         try:
             return super().execute(context)
         finally:
-            self.env_vars, self.requirements, self._wrapper_config = env_vars, requirements, None
+            self.env_vars, self.pypi_dependencies, self._wrapper_config = env_vars, pypi_dependencies, None
 
     def get_python_source(self) -> str:
         source = super().get_python_source()
@@ -113,13 +113,14 @@ def manifest_of(fake_pixi) -> str:
     return Path(fake_pixi.calls[-1]["argv"][2]).read_text()
 
 
-def test_mixin_wraps_a_task_pixi_function(fake_pixi, monkeypatch) -> None:
+@pytest.mark.parametrize("pypi_dependencies", [{"pandas": "*"}, ["pandas"], "# data\npandas\n"])
+def test_mixin_wraps_a_task_pixi_function(fake_pixi, monkeypatch, pypi_dependencies) -> None:
     monkeypatch.setattr(task, "wrapped_pixi", wrapped_pixi_task, raising=False)
     with DAG("wrapped") as dag:
 
         @task.wrapped_pixi(
             tag="step",
-            pypi_dependencies={"pandas": "*"},
+            pypi_dependencies=pypi_dependencies,
             pixi_binary=str(fake_pixi.path),
             cleanup_temp_manifest=False,
         )
@@ -132,7 +133,7 @@ def test_mixin_wraps_a_task_pixi_function(fake_pixi, monkeypatch) -> None:
     assert op.execute({"ti": MagicMock()}) == {"label": "step", "result": 42, "token": "secret"}
     assert tomli.loads(manifest_of(fake_pixi))["pypi-dependencies"] == {"pandas": "*", "wrapper-runtime": ">=1"}
     assert op.env_vars is None
-    assert op.requirements == []
+    assert op.pypi_dependencies == pypi_dependencies
 
 
 def test_mixin_gets_the_source_of_pixi_operator_through_super(monkeypatch) -> None:
@@ -173,7 +174,7 @@ def test_operator_ships_generated_source_for_a_placeholder(fake_pixi) -> None:
     assert op.execute({"ti": MagicMock(), "run_id": "r1"}) == {"label": "flow", "result": "DAG/R1", "token": None}
 
 
-def test_wrapper_requirements_cannot_extend_a_project_environment(fake_pixi, tmp_path: Path) -> None:
+def test_wrapper_packages_cannot_extend_a_project_environment(fake_pixi, tmp_path: Path) -> None:
     op = PixiOperator(
         task_id="t",
         pixi_project_path=str(tmp_path),
@@ -181,7 +182,6 @@ def test_wrapper_requirements_cannot_extend_a_project_environment(fake_pixi, tmp
         pixi_binary=str(fake_pixi.path),
     )
     assert not op.inline_manifest
-    op.requirements = ["wrapper-runtime"]
     with pytest.raises(AirflowException, match=f"can only extend an inline manifest.*{re.escape(str(tmp_path))}"):
-        op.execute({"ti": MagicMock()})
-    assert fake_pixi.calls == []
+        op.add_pypi_dependencies("wrapper-runtime")
+    assert op.pypi_dependencies is None

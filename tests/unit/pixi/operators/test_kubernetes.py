@@ -79,17 +79,17 @@ def xcom(tmp_path: Path):
 def test_defaults() -> None:
     op = PixiKubernetesPodOperator(task_id="t", python_callable=add, **INLINE)
     assert op.image == DEFAULT_IMAGE == f"ghcr.io/prefix-dev/pixi:{MIN_PIXI_VERSION}"
-    assert {"op_args", "op_kwargs", "requirements", "image", "env_vars"} <= set(op.template_fields)
+    assert {"op_args", "op_kwargs", "pypi_dependencies", "image", "env_vars"} <= set(op.template_fields)
     assert not {"cmds", "arguments"} & set(op.template_fields)
 
 
 def test_pod_runs_the_function_in_an_inline_environment(fake_pixi, tmp_path: Path) -> None:
-    op = make(fake_pixi, op_args=[2], op_kwargs={"b": 3}, requirements=["pandas"], environment="test")
+    op = make(fake_pixi, op_args=[2], op_kwargs={"b": 3}, pypi_dependencies=["pandas"])
     proc = run_pod(op, tmp_path)
     assert proc.returncode == 0, proc.stderr
     assert xcom(tmp_path) == 5
     call = fake_pixi.calls[-1]
-    assert call["argv"][3:5] == ["--environment", "test"]
+    assert call["argv"][3] == "python"
     assert 'pandas = "*"' in Path(call["argv"][2]).read_text()
 
 
@@ -224,9 +224,9 @@ def test_pickled_xcom_is_a_base64_string(fake_pixi, tmp_path: Path) -> None:
     assert pickle.loads(base64.b64decode(xcom(tmp_path))) == datetime.date(2026, 1, 2)
 
 
-def test_requirements_cannot_extend_a_project_of_the_image(fake_pixi) -> None:
+def test_pypi_dependencies_cannot_extend_a_project_of_the_image(fake_pixi) -> None:
     op = make(fake_pixi, pixi_project_path="/app", python_callable="m:f")
-    op.requirements = ["pandas"]
+    op.pypi_dependencies = ["pandas"]
     with pytest.raises(Exception, match="can only extend an inline manifest"):
         op.pod_script()
 
@@ -326,6 +326,17 @@ def test_templated_lock_mode_of_an_inline_manifest_fails_before_the_pod_exists(f
     pod_execute.assert_not_called()
 
 
+def test_templated_environment_of_an_inline_manifest_fails_before_the_pod_exists(fake_pixi) -> None:
+    op = make(fake_pixi, environment="{{ params.env }}")
+    op.environment = "gpu"
+    with (
+        patch.object(KubernetesPodOperator, "execute") as pod_execute,
+        pytest.raises(AirflowException, match="an inline manifest has only the default environment"),
+    ):
+        op.execute({"ti": MagicMock()})
+    pod_execute.assert_not_called()
+
+
 def test_inline_manifest_is_solved_for_linux_nodes(fake_pixi, tmp_path: Path) -> None:
     op = make(fake_pixi, op_args=[1])
     assert op.default_platforms() == list(DEFAULT_POD_PLATFORMS) == ["linux-64", "linux-aarch64"]
@@ -371,7 +382,7 @@ def test_an_exception_reaches_the_termination_message(fake_pixi, tmp_path: Path)
 def test_a_long_exception_is_cut_to_fit_the_termination_message(fake_pixi, tmp_path: Path) -> None:
     deep = "".join(f"def f{i}():\n    return f{i + 1}()\n" for i in range(80))
     deep += "def f80():\n    raise ValueError('é' * 600)\nf0()"
-    proc = run_pod(make(fake_pixi, python_callable="builtins:exec", op_args=[deep]), tmp_path)
+    proc = run_pod(make(fake_pixi, python_callable="builtins:exec", op_args=[deep, {}]), tmp_path)
     assert proc.returncode == 1
     data = (tmp_path / "termination-log").read_bytes()
     assert len(data) <= 4000

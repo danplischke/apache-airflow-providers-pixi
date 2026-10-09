@@ -79,3 +79,12 @@
     options:
       members: [resolve_env, parse_connection_reference, CONNECTION_FIELDS]
       toc_label: utils.env
+
+::: airflow.providers.pixi.utils.manifest
+    options:
+      members: [pypi_dependencies_table, conda_dependencies]
+      toc_label: utils.manifest
+
+::: airflow.providers.pixi.runtime.runner
+    options:
+      toc_label: runtime.runner

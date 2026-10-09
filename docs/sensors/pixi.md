@@ -19,7 +19,7 @@ def landed(path: str) -> bool:
 
 PixiSensor(
     task_id="wait_for_input",
-    requirements=["s3fs"],
+    pypi_dependencies=["s3fs"],
     python_callable=landed,
     op_args=["s3://bucket/{{ ds }}/input.parquet"],
     poke_interval=60,
@@ -70,7 +70,7 @@ relative to the DAG file.
 from airflow.sdk import task
 
 
-@task.pixi_sensor(requirements=["s3fs"], poke_interval=60, mode="reschedule", env_cache_path="/var/cache/pixi-airflow")
+@task.pixi_sensor(pypi_dependencies=["s3fs"], poke_interval=60, mode="reschedule", env_cache_path="/var/cache/pixi-airflow")
 def landed(path: str) -> bool:
     import s3fs
 

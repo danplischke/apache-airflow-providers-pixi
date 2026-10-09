@@ -24,20 +24,13 @@ from packaging.utils import canonicalize_name
 
 from airflow.providers.pixi.exceptions import PixiCallableError
 from airflow.providers.pixi.hooks.pixi import pixi_auth_env
+from airflow.providers.pixi.runtime.runner import ERROR_SUFFIX, PICKLE_PROTOCOL
 from airflow.providers.pixi.utils.compat import AirflowException, AirflowSkipException, BranchMixIn, SkipMixin
 from airflow.providers.pixi.utils.context import serializable_context
 from airflow.providers.pixi.utils.env import check_env_sources, resolve_env
-from airflow.providers.pixi.utils.manifest import (
-    build_pixi_toml,
-    check_manifest,
-    conda_dependencies,
-    manifest_table,
-    pypi_dependencies_from_requirements,
-)
+from airflow.providers.pixi.utils.manifest import build_pixi_toml, conda_dependencies, pypi_dependencies_table
 from airflow.providers.pixi.utils.pixi import MIN_PIXI_VERSION, local_platform, resolve_pixi
 from airflow.providers.pixi.utils.source import (
-    ERROR_SUFFIX,
-    PICKLE_PROTOCOL,
     RUNNER_SCRIPT,
     STRIPPED_DECORATORS,
     function_source,
@@ -72,6 +65,16 @@ _DECORATOR_FUNCTIONS = (
 )
 
 
+def _needs_rendering(value: Any) -> bool:
+    if isinstance(value, str):
+        return "{{" in value
+    if isinstance(value, dict):
+        return any(_needs_rendering(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_needs_rendering(item) for item in value)
+    return False
+
+
 def _write_atomic(path: str, text: str) -> None:
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".pixi-airflow-")
     with os.fdopen(fd, "w") as f:
@@ -104,39 +107,32 @@ class BasePixiOperator(BaseOperator):
     """Base class of the Pixi operators: chooses the Pixi environment and prepares it.
 
     The environment comes from exactly one of ``pixi_project_path`` (a project directory),
-    ``pixi_toml_path`` (a ``pixi.toml`` or ``pyproject.toml``) or an inline manifest:
-    ``dependencies`` / ``pypi_dependencies`` / ``requirements`` plus ``channels``, ``platforms``,
-    ``workspace_name``, ``pypi_options``, ``environments`` and ``feature``, as in ``pixi.toml``.
+    ``pixi_toml_path`` (a ``pixi.toml`` or ``pyproject.toml``) or an inline manifest: a list of packages in
+    ``dependencies`` / ``pypi_dependencies``, with ``channels`` and ``platforms``. Anything
+    else, such as PyPI indexes, features or several environments, belongs in a ``pixi.toml``.
 
     :param pixi_project_path: a Pixi project directory, with a ``pixi.toml`` or ``pyproject.toml``
         (templated).
     :param pixi_toml_path: a ``pixi.toml`` or ``pyproject.toml``; pixi uses exactly that file (templated).
-    :param environment: the manifest environment to run in, if it defines several (templated).
+    :param environment: the environment of a project or manifest file to run in, if it defines several
+        (templated). Not for inline manifests, which have only the default environment.
     :param lock_mode: how pixi treats the ``pixi.lock`` of a project or manifest file (templated). ``None``
         (default) runs plain ``pixi run``, which solves again and rewrites the lock file when it no longer
         matches the manifest. ``"locked"`` passes ``--locked``: the run fails if the lock file is out of date.
         ``"frozen"`` passes ``--frozen``: the environment is installed from the lock file as it is, without
         checking it against the manifest. Not for inline manifests, which have no lock file.
-    :param requirements: pip requirement strings, as ``@task.virtualenv`` takes them (templated), added to an
-        inline manifest's ``[pypi-dependencies]``. An inline manifest with PyPI packages but no ``python``
-        dependency gets the worker's Python version.
     :param dependencies: conda dependencies of an inline manifest, a dict or a list of MatchSpecs.
-    :param pypi_dependencies: ``[pypi-dependencies]`` of an inline manifest.
+    :param pypi_dependencies: PyPI dependencies of an inline manifest (templated): a dict as under
+        ``[pypi-dependencies]`` in a ``pixi.toml``, or pip requirement strings as ``@task.virtualenv`` takes them,
+        a list or one string that may hold several lines, such as a rendered requirements file. An inline
+        manifest with PyPI packages but no ``python`` dependency gets the worker's Python version.
     :param channels: channels of an inline manifest; default ``["conda-forge"]``.
     :param platforms: platforms of an inline manifest; default :meth:`default_platforms`, the platform of the
         machine that runs pixi.
-    :param workspace_name: ``[workspace] name`` of an inline manifest.
-    :param pypi_options: ``[pypi-options]`` of an inline manifest.
-    :param environments: ``[environments]`` of an inline manifest.
-    :param feature: ``[feature.<name>]`` tables of an inline manifest, with ``channels``, ``platforms``,
-        ``dependencies`` and ``pypi_dependencies``.
     :param env_cache_path: keep inline environments in ``<env_cache_path>/pixi-<hash>`` and reuse them across
         runs, like ``venv_cache_path`` of ``PythonVirtualenvOperator``. Otherwise an inline environment is
         built in a temporary directory, removed after the run unless ``cleanup_temp_manifest=False``.
     :param cleanup_temp_manifest: remove the temporary directory of an inline environment after the run.
-    :param validate_manifest: check an inline manifest against pixi's manifest schema for
-        :data:`MIN_PIXI_VERSION`, when the DAG is parsed and again when the task runs. Turn it off for keys that
-        only a newer pixi on the workers knows.
     :param pixi_binary: the pixi executable, a name on ``PATH`` or a path. It must be installed on the workers,
         in version :data:`MIN_PIXI_VERSION` or newer; the provider never installs it.
 
@@ -150,7 +146,7 @@ class BasePixiOperator(BaseOperator):
         "pixi_toml_path",
         "environment",
         "lock_mode",
-        "requirements",
+        "pypi_dependencies",
     )
 
     def __init__(
@@ -160,18 +156,12 @@ class BasePixiOperator(BaseOperator):
         pixi_toml_path: str | None = None,
         environment: str | None = None,
         lock_mode: Literal["locked", "frozen"] | None = None,
-        requirements: Sequence[str] | str | None = None,
         dependencies: dict[str, Any] | Sequence[str] | None = None,
-        pypi_dependencies: dict[str, Any] | None = None,
+        pypi_dependencies: dict[str, Any] | Sequence[str] | str | None = None,
         channels: Sequence[str] | None = None,
         platforms: Sequence[str] | None = None,
-        workspace_name: str | None = None,
-        pypi_options: dict[str, Any] | None = None,
-        environments: dict[str, Any] | None = None,
-        feature: dict[str, Any] | None = None,
         env_cache_path: str | None = None,
         cleanup_temp_manifest: bool = True,
-        validate_manifest: bool = True,
         pixi_binary: str = "pixi",
         **kwargs: Any,
     ) -> None:
@@ -180,71 +170,75 @@ class BasePixiOperator(BaseOperator):
         self.pixi_toml_path = pixi_toml_path
         self.environment = environment
         self.lock_mode = lock_mode
-        self.requirements = [requirements] if isinstance(requirements, str) else list(requirements or [])
         self.dependencies = dependencies
         self.pypi_dependencies = pypi_dependencies
         self.channels = channels
         self.platforms = platforms
-        self.workspace_name = workspace_name
-        self.pypi_options = pypi_options
-        self.environments = environments
-        self.feature = feature
         self.env_cache_path = env_cache_path
         self.cleanup_temp_manifest = cleanup_temp_manifest
-        self.validate_manifest = validate_manifest
         self.pixi_binary = pixi_binary
         self._held_manifest: tuple[str, str] | None = None
 
-        has_inline = bool(dependencies) or bool(pypi_dependencies) or bool(self.requirements)
+        has_inline = bool(dependencies) or bool(pypi_dependencies)
         if sum([pixi_project_path is not None, pixi_toml_path is not None, has_inline]) != 1:
             raise ValueError(
                 "Exactly one of pixi_project_path, pixi_toml_path, or inline "
-                "(dependencies / pypi_dependencies / requirements) must be provided."
+                "(dependencies / pypi_dependencies) must be provided."
             )
-        if not any("{{" in r for r in self.requirements):
-            pypi_dependencies_from_requirements(self.requirements)
-        if validate_manifest and has_inline:
-            check_manifest(
-                manifest_table(
-                    channels=channels or DEFAULT_CHANNELS,
-                    platforms=platforms or ["linux-64"],
-                    workspace_name=workspace_name,
-                    dependencies=dependencies,
-                    pypi_dependencies=pypi_dependencies,
-                    pypi_options=pypi_options,
-                    environments=environments,
-                    feature=feature,
-                )
-            )
+        if not _needs_rendering(pypi_dependencies):
+            pypi_dependencies_table(pypi_dependencies)
+        conda_dependencies(dependencies)
+        if not (isinstance(environment, str) and "{{" in environment):
+            self._checked_environment(ValueError)
         if not (isinstance(lock_mode, str) and "{{" in lock_mode):
             self._checked_lock_mode(ValueError)
 
     @property
     def inline_manifest(self) -> bool:
-        """Whether the environment comes from an inline manifest, the only one ``requirements`` can extend."""
+        """Whether the environment comes from an inline manifest, the only one :meth:`add_pypi_dependencies` extends."""
         return self.pixi_project_path is None and self.pixi_toml_path is None
+
+    def add_pypi_dependencies(self, *requirements: str) -> None:
+        """Add pip requirement strings, such as ``"mytracker>=1"``, to the PyPI dependencies of the inline manifest.
+
+        For subclasses and mixins that need a package in the environment, whichever form the DAG gave
+        ``pypi_dependencies`` in: a dict gets the ``[pypi-dependencies]`` entries of ``requirements``, pip
+        strings become a list with ``requirements`` at the end. ``pypi_dependencies`` is assigned a new value,
+        so a value saved before stays as it was and can be restored afterwards.
+
+        :raises AirflowException: if the environment comes from ``pixi_project_path`` or ``pixi_toml_path``,
+            whose manifest has to list the packages itself.
+        :raises ValueError: for a requirement ``pypi_dependencies`` does not accept, or a package listed twice.
+        """
+        if not self.inline_manifest:
+            raise AirflowException(
+                self._project_pypi_error(list(requirements), self.pixi_project_path or self.pixi_toml_path)
+            )
+        added = pypi_dependencies_table(list(requirements))
+        current = self.pypi_dependencies
+        if isinstance(current, dict):
+            listed = {canonicalize_name(name) for name in current}
+            for name in added:
+                if canonicalize_name(name) in listed:
+                    raise ValueError(f"{name} is listed twice in pypi_dependencies")
+            self.pypi_dependencies = {**current, **added}
+            return
+        extended = [*([current] if isinstance(current, str) else current or []), *requirements]
+        if not _needs_rendering(extended):
+            pypi_dependencies_table(extended)
+        self.pypi_dependencies = extended
 
     def inline_manifest_toml(self) -> str:
         """Return the ``pixi.toml`` of an inline manifest, from the rendered arguments."""
-        pypi_dependencies = dict(self.pypi_dependencies or {})
-        listed = {canonicalize_name(name) for name in pypi_dependencies}
-        for name, spec in pypi_dependencies_from_requirements(self.requirements).items():
-            if canonicalize_name(name) in listed:
-                raise ValueError(f"{name} is listed in both pypi_dependencies and requirements")
-            pypi_dependencies[name] = spec
+        pypi_dependencies = pypi_dependencies_table(self.pypi_dependencies)
         dependencies = conda_dependencies(self.dependencies)
-        if pypi_dependencies and "python" not in dependencies and not self.feature:
+        if pypi_dependencies and "python" not in dependencies:
             dependencies["python"] = f"{sys.version_info.major}.{sys.version_info.minor}.*"
         return build_pixi_toml(
             channels=self.channels or DEFAULT_CHANNELS,
             platforms=self.platforms or self.default_platforms(),
-            workspace_name=self.workspace_name,
             dependencies=dependencies,
             pypi_dependencies=pypi_dependencies,
-            pypi_options=self.pypi_options,
-            environments=self.environments,
-            feature=self.feature,
-            validate_manifest=self.validate_manifest,
         )
 
     def default_platforms(self) -> list[str]:
@@ -254,6 +248,16 @@ class BasePixiOperator(BaseOperator):
         missing on one of them fails the solve, so only the platform that runs it is listed.
         """
         return [local_platform()]
+
+    def _checked_environment(self, error: type[Exception]) -> str | None:
+        environment = self.environment or None
+        if environment and self.inline_manifest:
+            raise error(
+                f"environment={environment!r} needs a manifest that defines it, and an inline manifest has only the "
+                "default environment; define the environment in a pixi.toml and use pixi_project_path or "
+                "pixi_toml_path"
+            )
+        return environment
 
     def _checked_lock_mode(self, error: type[Exception]) -> str | None:
         lock_mode = self.lock_mode or None
@@ -271,7 +275,8 @@ class BasePixiOperator(BaseOperator):
 
         Called when the task runs, as templated fields are then rendered.
         """
-        options = ["--environment", self.environment] if self.environment else []
+        environment = self._checked_environment(AirflowException)
+        options = ["--environment", environment] if environment else []
         lock_mode = self._checked_lock_mode(AirflowException)
         if lock_mode:
             options.append(f"--{lock_mode}")
@@ -286,12 +291,16 @@ class BasePixiOperator(BaseOperator):
             path = os.path.join(os.path.dirname(dag.fileloc), path)
         return os.path.abspath(path)
 
+    @staticmethod
+    def _project_pypi_error(pypi_dependencies: Any, manifest: str | None) -> str:
+        return (
+            f"pypi_dependencies {pypi_dependencies!r} can only extend an inline manifest; "
+            f"add them to the environment of {manifest} instead"
+        )
+
     def _check_project_manifest(self, manifest: str) -> None:
-        if self.requirements:
-            raise AirflowException(
-                f"requirements {self.requirements} can only extend an inline manifest; "
-                f"add them to the environment of {manifest} instead"
-            )
+        if self.pypi_dependencies:
+            raise AirflowException(self._project_pypi_error(self.pypi_dependencies, manifest))
 
     @contextlib.contextmanager
     def local_manifest(self) -> Iterator[tuple[str, str]]:
@@ -364,8 +373,8 @@ class BasePixiPythonOperator(BasePixiOperator):
     of them, as for ``@task.virtualenv``. Dates and datetimes arrive as ISO 8601 strings.
 
     Subclasses and mixins can change what runs, the same way as for ``@task.virtualenv``: override
-    :meth:`get_python_source`, and set ``op_args``, ``op_kwargs`` or ``requirements`` in ``execute`` before
-    calling ``super().execute``.
+    :meth:`get_python_source`, and set ``op_args`` or ``op_kwargs``, or call :meth:`add_pypi_dependencies`, in
+    ``execute`` before calling ``super().execute``.
     """
 
     template_fields: Sequence[str] = (*BasePixiOperator.template_fields, "op_args", "op_kwargs")
@@ -635,8 +644,8 @@ class PixiOperator(PixiSubprocessMixin, BasePixiPythonOperator):
     and killing the task stop pixi and everything it started.
 
     Subclasses and mixins can change what runs, the same way as for ``@task.virtualenv``: override
-    :meth:`get_python_source`, and set ``op_args``, ``op_kwargs``, ``env_vars`` or ``requirements`` in
-    ``execute`` before calling ``super().execute``.
+    :meth:`get_python_source`, and set ``op_args``, ``op_kwargs`` or ``env_vars``, or call
+    :meth:`add_pypi_dependencies`, in ``execute`` before calling ``super().execute``.
     """
 
     template_fields: Sequence[str] = (*BasePixiPythonOperator.template_fields, *PixiSubprocessMixin.template_fields)

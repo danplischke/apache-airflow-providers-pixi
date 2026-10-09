@@ -3,8 +3,6 @@
 default_language_version:
   python: python3
 
-exclude: ^src/airflow/providers/pixi/utils/pixi_manifest\.schema\.json$
-
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -30,6 +28,12 @@ repos:
         entry: uv run --group dev ruff format
         language: system
         types_or: [python, pyi]
+      - id: mypy
+        name: mypy
+        entry: uv run --group dev mypy
+        language: system
+        files: ^src/airflow/providers/pixi/runtime/
+        pass_filenames: false
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.12.23

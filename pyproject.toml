@@ -27,7 +27,6 @@ requires-python = ">=3.10,!=3.15"
 dependencies = [
     "apache-airflow>=3.1.2",
     "apache-airflow-providers-standard>=1.9.1",
-    "jsonschema>=4.19.1",
     "packaging>=22",
     "tomlkit>=0.12",
 ]
@@ -40,8 +39,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     "apache-airflow-providers-pixi[cncf.kubernetes]",
+    "jsonschema>=4.19.1",
     "pre-commit>=3.5",
     "pytest>=7.0",
+    "mypy>=1.11",
     "pytest-cov>=4.0",
     "ruff>=0.8",
 ]
@@ -72,9 +73,19 @@ include = [
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
 
+[tool.mypy]
+files = ["src/airflow/providers/pixi/runtime"]
+mypy_path = "src"
+explicit_package_bases = true
+strict = true
+python_version = "3.10"
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+"src/airflow/providers/pixi/runtime/runner.py" = ["S102", "BLE001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["airflow.providers.pixi"]

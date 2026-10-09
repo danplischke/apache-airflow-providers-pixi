@@ -75,7 +75,7 @@ def test_exit_code_99_skips_and_others_fail(fake_pixi, tmp_path: Path) -> None:
 
 def test_an_inline_manifest_is_rejected(fake_pixi, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="inline manifest"):
-        make(fake_pixi, tmp_path, pixi_project_path=None, requirements=["pandas"], task="test")
+        make(fake_pixi, tmp_path, pixi_project_path=None, pypi_dependencies=["pandas"], task="test")
 
 
 @pytest.mark.parametrize(

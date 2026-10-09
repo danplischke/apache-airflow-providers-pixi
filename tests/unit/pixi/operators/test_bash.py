@@ -52,7 +52,7 @@ def test_environment_is_templated(fake_pixi, tmp_path: Path) -> None:
 
 def test_inline_manifest_is_written_and_removed(fake_pixi, tmp_path: Path) -> None:
     op = make(
-        fake_pixi, tmp_path, pixi_project_path=None, requirements=["pandas"], bash_command="grep pandas pixi.toml"
+        fake_pixi, tmp_path, pixi_project_path=None, pypi_dependencies=["pandas"], bash_command="grep pandas pixi.toml"
     )
     assert op.execute({}) == 'pandas = "*"'
     assert not Path(fake_pixi.calls[-1]["argv"][2]).exists()
