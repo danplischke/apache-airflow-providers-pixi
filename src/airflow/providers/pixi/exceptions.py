@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from airflow.providers.pixi.utils.compat import AirflowException
 
-__all__ = ["PixiCallableError"]
+__all__ = ("PixiCallableError",)
 
 
 class PixiCallableError(AirflowException):

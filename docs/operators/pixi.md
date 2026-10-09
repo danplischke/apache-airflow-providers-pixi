@@ -20,7 +20,8 @@ The callable is either a function or a `"module.path:callable_name"` string:
   installed there. The manifest's directory is the working directory, so modules next to it are
   importable.
 
-The return value becomes the task's XCom.
+Either may be a coroutine function (`async def`): the environment awaits it with `asyncio.run` and
+takes the result. The return value becomes the task's XCom.
 
 ```python title="tests/system/pixi/example_pixi.py"
 --8<-- "tests/system/pixi/example_pixi.py:pixi_operator"
@@ -355,6 +356,38 @@ PixiOperator(
 ```
 
 `env_vars` is not templated, so secrets passed here are never rendered into the UI.
+
+### Isolation from the worker's Python
+
+The environment's Python imports only what the Pixi environment has, not the packages of the worker,
+such as Airflow itself. So the run gets the worker's environment without the variables that point a
+Python at other packages ([`WORKER_PYTHON_VARIABLES`][airflow.providers.pixi.operators.pixi.WORKER_PYTHON_VARIABLES]):
+
+| Variable | Why it is left out |
+|---|---|
+| `PYTHONPATH` | its directories would be searched before the environment's packages |
+| `PYTHONHOME` | it would make the environment's Python look for its standard library elsewhere |
+| `PYTHONUSERBASE` | the location of the worker user's own packages |
+| `VIRTUAL_ENV` | the worker's virtualenv, which tools such as uv would install into |
+
+`PYTHONNOUSERSITE=1` is set as well. A Pixi environment is not a virtualenv, so its Python would
+otherwise add the user's site-packages (`~/.local/lib/pythonX.Y/site-packages`) to its path, where a
+worker image may have installed Airflow with `pip install --user`.
+
+To give the environment such a variable on purpose, set it in `env_vars` (or `env` for the
+[Bash operator](bash.md)), which is applied after this:
+
+```python
+PixiOperator(
+    task_id="train",
+    pixi_project_path="/path/to/project",
+    python_callable="mymodule:train",
+    env_vars={"PYTHONPATH": "/path/to/project/src"},
+)
+```
+
+Modules next to the manifest are importable without it, as the manifest's directory is the working
+directory.
 
 ### From Variables and Connections
 

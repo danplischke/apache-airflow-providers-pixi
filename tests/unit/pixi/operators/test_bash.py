@@ -212,3 +212,16 @@ def test_task_pixi_bash_gets_the_run_env(fake_pixi, tmp_path: Path, monkeypatch)
 
     op = dag.get_task("show")
     assert op.execute({"task": op}) == "prod https://api.example.com"
+
+
+def test_the_workers_python_paths_do_not_reach_the_command(fake_pixi, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PYTHONPATH", "/worker/site-packages")
+    monkeypatch.setenv("VIRTUAL_ENV", "/worker/venv")
+    command = 'echo "${PYTHONPATH:-unset} ${VIRTUAL_ENV:-unset} $PYTHONNOUSERSITE"'
+    assert make(fake_pixi, tmp_path, bash_command=command).execute({}) == "unset unset 1"
+
+
+def test_env_can_set_pythonpath_for_the_command(fake_pixi, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PYTHONPATH", "/worker/site-packages")
+    op = make(fake_pixi, tmp_path, bash_command='echo "$PYTHONPATH"', env={"PYTHONPATH": "/explicit"}, append_env=True)
+    assert op.execute({}) == "/explicit"

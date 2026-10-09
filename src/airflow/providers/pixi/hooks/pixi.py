@@ -22,7 +22,7 @@ from airflow.sdk.log import mask_secret
 
 from airflow.providers.pixi.utils.compat import AirflowException
 
-__all__ = ["AUTH_TYPES", "PixiCredentials", "PixiHook", "pixi_auth_env"]
+__all__ = ("AUTH_TYPES", "PixiCredentials", "PixiHook", "pixi_auth_env")
 
 AUTH_TYPES = ("auto", "bearer_token", "conda_token", "basic_http", "netrc")
 """Values of the ``auth_type`` extra of a ``pixi`` connection."""

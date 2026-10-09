@@ -27,6 +27,10 @@ Initial version of the provider.
   substitutes the values of a task's declared `args` into its `cmd` without quoting.
 - `PixiKubernetesPodOperator` and `@task.pixi_kubernetes`: run a Python callable in a Pixi environment
   in a Kubernetes pod, with the `cncf.kubernetes` extra.
+- Runs on the worker leave out the worker's `PYTHONPATH`, `PYTHONHOME`, `PYTHONUSERBASE` and `VIRTUAL_ENV`
+  and set `PYTHONNOUSERSITE=1`, so the environment's Python never imports the worker's packages.
+- Callables may be coroutine functions (`async def`); the environment awaits them, on every operator,
+  sensor and pod.
 - `PixiSensor` and `@task.pixi_sensor`: a sensor whose callable runs in a Pixi environment on each poke.
 - `PixiBranchOperator` and `@task.pixi_branch`: choose the tasks to follow with a callable run in a Pixi
   environment, like `BranchPythonVirtualenvOperator` and `@task.branch_virtualenv`.

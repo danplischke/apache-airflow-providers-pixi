@@ -106,3 +106,15 @@ def test_relative_project_path_is_relative_to_the_dag_file(fake_pixi, tmp_path: 
         )
     sensor.execute(context())
     assert fake_pixi.calls[-1]["argv"][:4] == ["run", "--manifest-path", str(tmp_path / "project"), "--locked"]
+
+
+async def ready(value):
+    import asyncio
+
+    await asyncio.sleep(0)
+    return bool(value)
+
+
+def test_an_async_poke_function_is_awaited(fake_pixi) -> None:
+    assert make(fake_pixi, python_callable=ready, op_args=[1]).poke(context()).is_done is True
+    assert make(fake_pixi, python_callable=ready, op_args=[0]).poke(context()).is_done is False

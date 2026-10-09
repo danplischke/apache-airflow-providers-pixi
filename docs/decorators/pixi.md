@@ -55,6 +55,8 @@ Like `@task.virtualenv`, the function's source is shipped to the environment and
   not have Airflow installed at all.
 - **No variables from enclosing functions.** A function that uses one is rejected when the DAG is
   parsed; pass the value as an argument instead.
+- **`async def` works too.** The environment awaits the coroutine with `asyncio.run`; the event
+  loop exists only for that call.
 - **Arguments and the return value are serialized**, as JSON by default or with
   `serializer="pickle"`. See [Arguments and return values](../operators/pixi.md#arguments-and-return-values).
 - **Context values arrive as parameters**, as for `@task.virtualenv`: `ds`, `params`, `run_id`,

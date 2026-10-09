@@ -496,3 +496,16 @@ def test_task_pixi_kubernetes_fills_context_parameters(fake_pixi, tmp_path: Path
 
     assert run_pod(dag.get_task("step"), tmp_path, {"ds": "2026-01-02"}).returncode == 0
     assert xcom(tmp_path) == [1, "2026-01-02"]
+
+
+async def add_later(a, b=0):
+    import asyncio
+
+    await asyncio.sleep(0)
+    return a + b
+
+
+def test_pod_awaits_an_async_function(fake_pixi, tmp_path: Path) -> None:
+    proc = run_pod(make(fake_pixi, python_callable=add_later, op_args=[2], op_kwargs={"b": 3}), tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert xcom(tmp_path) == 5

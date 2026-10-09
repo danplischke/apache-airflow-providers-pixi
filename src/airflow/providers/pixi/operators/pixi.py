@@ -44,8 +44,9 @@ from airflow.providers.pixi.utils.source import (
     validate_callable,
 )
 
-__all__ = [
+__all__ = (
     "MIN_PIXI_VERSION",
+    "WORKER_PYTHON_VARIABLES",
     "BasePixiOperator",
     "BasePixiPythonOperator",
     "PixiBranchOperator",
@@ -53,10 +54,14 @@ __all__ = [
     "PixiRunEnvMixin",
     "PixiShortCircuitOperator",
     "PixiSubprocessMixin",
-]
+)
 
 DEFAULT_CHANNELS = ("conda-forge",)
 LOCK_MODES = ("locked", "frozen")
+
+WORKER_PYTHON_VARIABLES = ("PYTHONPATH", "PYTHONHOME", "PYTHONUSERBASE", "VIRTUAL_ENV")
+"""Variables of the worker's Python left out of a pixi run, so the environment's Python never imports the
+worker's packages; ``env_vars`` or ``env`` can set them for a run."""
 
 _DECORATOR_FUNCTIONS = (
     "pixi_task",
@@ -493,13 +498,16 @@ class PixiRunEnvMixin(BaseOperator):
     ) -> Iterator[dict[str, str]]:
         """Yield the environment of a pixi run, valid until the block exits.
 
-        In increasing precedence: ``base`` (usually the worker's environment), the cache directory Variables,
-        ``env_from_variables`` and ``env_from_connections``, then ``overrides`` (such as ``env_vars``). With
-        ``pixi_conn_id``, ``RATTLER_AUTH_FILE`` and ``NETRC`` point at temporary files with the credentials,
-        merged with the files these variables named before (see
+        In increasing precedence: ``base`` (usually the worker's environment) without the worker's Python
+        settings (:data:`WORKER_PYTHON_VARIABLES`) and with ``PYTHONNOUSERSITE=1``, so the environment's Python
+        imports only what the Pixi environment has; the cache directory Variables; ``env_from_variables`` and
+        ``env_from_connections``; then ``overrides`` (such as ``env_vars``), which can set those Python variables
+        again. With ``pixi_conn_id``, ``RATTLER_AUTH_FILE`` and ``NETRC`` point at temporary files with the
+        credentials, merged with the files these variables named before (see
         :func:`~airflow.providers.pixi.hooks.pixi.pixi_auth_env`), and removed when the block exits.
         """
-        env = dict(base)
+        env = {name: value for name, value in base.items() if name not in WORKER_PYTHON_VARIABLES}
+        env["PYTHONNOUSERSITE"] = "1"
         env.update(
             resolve_env(
                 optional_variables={

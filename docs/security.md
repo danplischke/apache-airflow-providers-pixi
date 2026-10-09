@@ -16,6 +16,15 @@ runs, so a new upstream release can change what a task executes. For reproducibl
 environments, use a project directory with a committed `pixi.lock` (`pixi_project_path`), pin
 versions, and restrict `channels` to sources you trust.
 
+## Isolation from the worker
+
+The environment's Python doesn't see the worker's packages: `PYTHONPATH`, `PYTHONHOME`,
+`PYTHONUSERBASE` and `VIRTUAL_ENV` are left out of the run's environment and `PYTHONNOUSERSITE=1` is
+set, unless the task sets them itself (see
+[Isolation from the worker's Python](operators/pixi.md#isolation-from-the-workers-python)). It still
+runs as the worker's user, with the worker's other environment variables, so it can read what the
+worker can read.
+
 ## The `pickle` serializer
 
 With `serializer="pickle"`, the worker unpickles the return value written by code running in the Pixi
