@@ -161,3 +161,33 @@ def test_task_pixi_awaits_an_async_function(fake_pixi) -> None:
         double(21)
 
     assert test_dag().get_task("double").execute({"ti": MagicMock()}) == 42
+
+
+def test_decorated_operators_take_their_operators_fields() -> None:
+    from airflow.providers.pixi.decorators.branch import PixiBranchDecoratedOperator
+    from airflow.providers.pixi.decorators.external import PixiExternalDecoratedOperator
+    from airflow.providers.pixi.operators.external import PixiExternalPythonOperator
+    from airflow.providers.pixi.operators.pixi import PixiBranchOperator, PixiOperator
+
+    for decorated, operator in (
+        (PixiDecoratedOperator, PixiOperator),
+        (PixiBranchDecoratedOperator, PixiBranchOperator),
+        (PixiExternalDecoratedOperator, PixiExternalPythonOperator),
+    ):
+        assert decorated.template_fields == operator.template_fields
+        assert decorated.template_fields_renderers == operator.template_fields_renderers
+        assert decorated.get_python_source is BasePixiPythonOperator.get_python_source
+
+
+def test_a_mixin_in_front_keeps_its_own_fields() -> None:
+    class Mixin:
+        template_fields = ("op_args",)
+
+        def get_python_source(self) -> str:
+            return "mine"
+
+    class Decorated(Mixin, PixiDecoratedOperator):
+        pass
+
+    assert Decorated.template_fields == ("op_args",)
+    assert Decorated.get_python_source is Mixin.get_python_source

@@ -139,12 +139,12 @@ with `os.environ`.
 Linux cannot start a process with an environment variable longer than 128 KiB, so the pod would
 fail to start. The operator checks this before it creates the pod: when the encoded callable with its
 arguments and context, or the inline manifest, is longer than 120 KiB
-([`MAX_ENV_VALUE_BYTES`][airflow.providers.pixi.operators.kubernetes.MAX_ENV_VALUE_BYTES]), the task
+([`MAX_ENV_VALUE_BYTES`][airflow.providers.pixi.operators.container.MAX_ENV_VALUE_BYTES]), the task
 fails with an error that names it:
 
 ```text
 AirflowException: The callable with its op_args, op_kwargs and the task context needs 180 KiB in the
-pod's environment variable PIXI_AIRFLOW_INPUT, more than the 120 KiB this operator allows, ...
+container's environment variable PIXI_AIRFLOW_INPUT, more than the 120 KiB this operator allows, ...
 ```
 
 Pass a path or URL instead of the data itself, or put the code into the image and use

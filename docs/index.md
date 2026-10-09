@@ -14,8 +14,10 @@ This package is for the `pixi` provider. All classes for this provider package a
 |---|---|---|
 | [`PixiOperator`](operators/pixi.md) | [`@task.pixi`](decorators/pixi.md) | runs a Python callable in a Pixi environment on the worker |
 | [`PixiBashOperator`](operators/bash.md) | `@task.pixi_bash` | runs a Bash command in a Pixi environment, like `BashOperator` |
-| [`PixiTaskOperator`](operators/task.md) | - | runs a task from the manifest's `[tasks]` with `pixi run <task>` |
+| [`PixiProjectTaskOperator`](operators/project_task.md) | - | runs a task from the manifest's `[tasks]` with `pixi run <task>` |
 | [`PixiKubernetesPodOperator`](operators/kubernetes.md) | `@task.pixi_kubernetes` | runs a Python callable in a Pixi environment in a Kubernetes pod |
+| [`PixiDockerOperator`](operators/docker.md) | `@task.pixi_docker` | runs a Python callable in a Pixi environment in a Docker container |
+| [`PixiExternalPythonOperator`](operators/external.md) | `@task.pixi_external` | runs a Python callable with the Python of an installed Pixi environment, without pixi, like `ExternalPythonOperator` |
 | [`PixiBranchOperator`](operators/branch.md) | `@task.pixi_branch` | chooses the tasks to follow with a Python callable run in a Pixi environment, like `BranchPythonVirtualenvOperator` |
 | [`PixiShortCircuitOperator`](operators/branch.md#short-circuit) | `@task.pixi_short_circuit` | skips the tasks downstream when a Python callable, run in a Pixi environment, returns a falsy value, like `ShortCircuitOperator` |
 | [`PixiSensor`](sensors/pixi.md) | `@task.pixi_sensor` | waits for a Python callable, run in a Pixi environment, to return a truthy value |
@@ -34,9 +36,11 @@ Install it on top of an existing Airflow installation:
 ```bash
 pip install apache-airflow-providers-pixi
 pip install "apache-airflow-providers-pixi[cncf.kubernetes]"
+pip install "apache-airflow-providers-pixi[docker]"
 ```
 
-The `cncf.kubernetes` extra adds the Kubernetes pod operator. For the minimum Airflow version
+The `cncf.kubernetes` extra adds the Kubernetes pod operator, and the `docker` extra the Docker
+operator. For the minimum Airflow version
 supported, see [Requirements](#requirements) below.
 
 The workers also need [Pixi](https://pixi.sh/latest/installation/), installed for example in the
@@ -61,6 +65,12 @@ With the `cncf.kubernetes` extra:
 | PIP package | Version required |
 |---|---|
 | `apache-airflow-providers-cncf-kubernetes` | `>=10.9.0` |
+
+With the `docker` extra:
+
+| PIP package | Version required |
+|---|---|
+| `apache-airflow-providers-docker` | `>=4.4.4` |
 
 On the workers:
 

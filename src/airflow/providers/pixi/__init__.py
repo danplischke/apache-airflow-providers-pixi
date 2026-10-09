@@ -10,19 +10,23 @@ _EXPORTS = {
     "PixiBashOperator": "airflow.providers.pixi.operators.bash",
     "PixiBranchOperator": "airflow.providers.pixi.operators.pixi",
     "PixiCallableError": "airflow.providers.pixi.exceptions",
+    "PixiExternalPythonOperator": "airflow.providers.pixi.operators.external",
     "PixiHook": "airflow.providers.pixi.hooks.pixi",
     "PixiOperator": "airflow.providers.pixi.operators.pixi",
+    "PixiProjectTaskOperator": "airflow.providers.pixi.operators.project_task",
     "PixiSensor": "airflow.providers.pixi.sensors.pixi",
     "PixiShortCircuitOperator": "airflow.providers.pixi.operators.pixi",
-    "PixiTaskOperator": "airflow.providers.pixi.operators.task",
+    "PixiTaskOperator": "airflow.providers.pixi.operators.task",  # deprecated, warns when instantiated
 }
 
 __all__ = (
     "PixiBashOperator",
     "PixiBranchOperator",
     "PixiCallableError",
+    "PixiExternalPythonOperator",
     "PixiHook",
     "PixiOperator",
+    "PixiProjectTaskOperator",
     "PixiSensor",
     "PixiShortCircuitOperator",
     "PixiTaskOperator",

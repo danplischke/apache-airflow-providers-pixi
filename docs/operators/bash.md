@@ -6,7 +6,7 @@ accepts all of its arguments, plus the environment arguments of the
 [Pixi Operator](pixi.md#choosing-the-environment) and its environment variable arguments: `env_vars`,
 `env_from_variables`, `env_from_connections`, `pixi_conn_id` and the cache directory Variables.
 
-To run a task defined in the manifest's `[tasks]`, use the [Pixi Task Operator](task.md).
+To run a task defined in the manifest's `[tasks]`, use the [Pixi Project Task Operator](project_task.md).
 
 ## Using the operator
 
@@ -56,7 +56,7 @@ the [Pixi Operator](pixi.md#environment-variables):
   ([Cache directories](pixi.md#cache-directories)).
 
 All of them can be set for every task through `default_args`, and apply to `PixiOperator`, `PixiBashOperator`
-and the [Pixi Task Operator](task.md) alike:
+and the [Pixi Project Task Operator](project_task.md) alike:
 
 ```python
 with DAG(

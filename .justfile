@@ -81,7 +81,8 @@ test-compat *versions:
         uv venv --quiet --allow-existing --python 3.12 "$venv"
         export VIRTUAL_ENV="$venv"
         uv pip install --quiet "apache-airflow==$v" apache-airflow-providers-standard \
-            apache-airflow-providers-cncf-kubernetes apache-airflow-providers-common-compat \
+            apache-airflow-providers-cncf-kubernetes apache-airflow-providers-docker \
+            apache-airflow-providers-common-compat \
             pytest pyyaml jsonschema tomlkit "packaging>=22" \
             -c "https://raw.githubusercontent.com/apache/airflow/constraints-$v/constraints-3.12.txt"
         uv pip install --quiet --no-deps -e .

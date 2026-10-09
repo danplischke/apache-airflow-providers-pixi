@@ -5,15 +5,19 @@ from typing import Any
 _EXPORTS = {
     "PixiBashOperator": "airflow.providers.pixi.operators.bash",
     "PixiBranchOperator": "airflow.providers.pixi.operators.pixi",
+    "PixiExternalPythonOperator": "airflow.providers.pixi.operators.external",
     "PixiOperator": "airflow.providers.pixi.operators.pixi",
+    "PixiProjectTaskOperator": "airflow.providers.pixi.operators.project_task",
     "PixiShortCircuitOperator": "airflow.providers.pixi.operators.pixi",
-    "PixiTaskOperator": "airflow.providers.pixi.operators.task",
+    "PixiTaskOperator": "airflow.providers.pixi.operators.task",  # deprecated, warns when instantiated
 }
 
 __all__ = (
     "PixiBashOperator",
     "PixiBranchOperator",
+    "PixiExternalPythonOperator",
     "PixiOperator",
+    "PixiProjectTaskOperator",
     "PixiShortCircuitOperator",
     "PixiTaskOperator",
 )

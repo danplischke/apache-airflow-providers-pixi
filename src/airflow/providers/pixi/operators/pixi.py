@@ -64,6 +64,8 @@ _DECORATOR_FUNCTIONS = (
     "pixi_sensor_task",
     "pixi_branch_task",
     "pixi_short_circuit_task",
+    "pixi_docker_task",
+    "pixi_external_task",
 )
 
 
@@ -563,6 +565,8 @@ class PixiSubprocessMixin(PixiRunEnvMixin):
     """
 
     template_fields: Sequence[str] = PixiRunEnvMixin.template_fields
+    _run_name = "pixi run"
+    """What the error and skip messages call the process that ran the callable."""
 
     def __init__(
         self,
@@ -582,32 +586,43 @@ class PixiSubprocessMixin(PixiRunEnvMixin):
         )
         self._process: subprocess.Popen[bytes] | None = None
 
+    @contextlib.contextmanager
+    def python_command(self: Any) -> Iterator[tuple[list[str], str, dict[str, str]]]:
+        """Yield the command that runs the environment's ``python``, the directory to run it in, and the variables it
+        needs on top of the worker's environment.
+
+        ``pixi run ... python`` in the directory of the manifest, which ``run_callable`` calls with the runner's
+        arguments. Override it to start the environment's Python another way, as
+        [`PixiExternalPythonOperator`][airflow.providers.pixi.operators.external.PixiExternalPythonOperator] does.
+        """
+        pixi = resolve_pixi(self.pixi_binary)
+        with self.local_manifest() as (manifest, cwd):
+            yield [*self.pixi_run_command(pixi, manifest), "python"], cwd, {}
+
     def run_callable(self: Any, context: Mapping[str, Any] | None = None) -> Any:
         """Call ``python_callable`` in the environment and return its result.
 
         :param context: the task context, for the callable's parameters named after its keys.
         """
-        pixi = resolve_pixi(self.pixi_binary)
         with (
-            self.local_manifest() as (manifest, cwd),
+            self.python_command() as (python, cwd, python_env),
             tempfile.TemporaryDirectory(prefix="airflow_pixi_io_") as io,
-            self.pixi_run_env(os.environ, self.env_vars) as env,
+            self.pixi_run_env({**os.environ, **python_env}, self.env_vars) as env,
         ):
             env.setdefault("PYTHONUNBUFFERED", "1")  # the callable's output reaches the log as it prints
             input_path, output_path = os.path.join(io, "input"), os.path.join(io, "output")
             Path(input_path).write_bytes(self.callable_input(context))
-            command = self.pixi_run_command(pixi, manifest)
-            self.log.info("Running %s in %s", " ".join(command), cwd)
+            self.log.info("Running %s in %s", " ".join(python), cwd)
             returncode, tail = self._run(
-                [*command, "python", "-c", RUNNER_SCRIPT, self.serializer, input_path, output_path], cwd, env
+                [*python, "-c", RUNNER_SCRIPT, self.serializer, input_path, output_path], cwd, env
             )
             if returncode in self.skip_on_exit_code:
-                raise AirflowSkipException(f"pixi run exited with code {returncode}, which skips the task")
+                raise AirflowSkipException(f"{self._run_name} exited with code {returncode}, which skips the task")
             if returncode != 0:
                 error_path = Path(output_path + ERROR_SUFFIX)
                 if error_path.exists():
                     raise self._callable_error(json.loads(error_path.read_text()))
-                raise AirflowException(f"pixi run exited with code {returncode}:\n" + "\n".join(tail))
+                raise AirflowException(f"{self._run_name} exited with code {returncode}:\n" + "\n".join(tail))
             if not os.path.exists(output_path):
                 raise self._missing_result()
             if self.serializer == "pickle":

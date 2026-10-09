@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.1.0
+
+### New operators and decorators
+
+- `PixiDockerOperator` and `@task.pixi_docker`: run a Python callable in a Pixi environment in a
+  Docker container, with the new `docker` extra (`apache-airflow-providers-docker>=4.4.4`, the version
+  Airflow 3.1.2's constraints pin). They take `DockerOperator`'s arguments, but the container's
+  environment variables go in `env_vars`, because `environment` is the Pixi environment. The return
+  value, or the exception the callable raised, is copied out of the container, so it never passes
+  through the log.
+- `PixiExternalPythonOperator` and `@task.pixi_external`: run a Python callable with the Python of an
+  environment that is already installed, `<workspace>/.pixi/envs/<environment>/bin/python`, like
+  `ExternalPythonOperator`. No pixi is needed at run time, for images whose environments are
+  installed when they are built.
+
+### Changes
+
+- `PixiTaskOperator` is now `PixiProjectTaskOperator`, in
+  `airflow.providers.pixi.operators.project_task`, so that it is not confused with `@task.pixi`. The
+  old name and module still work, with an `AirflowProviderDeprecationWarning`.
+- `PixiKubernetesPodOperator` and `PixiDockerOperator` share their base class,
+  `BasePixiContainerOperator` in `airflow.providers.pixi.operators.container`, which also holds
+  `DEFAULT_IMAGE` and `MAX_ENV_VALUE_BYTES`. Both names can still be imported from
+  `airflow.providers.pixi.operators.kubernetes`.
+- `PixiSubprocessMixin.python_command()` starts the environment's Python, for subclasses that start it
+  another way, as `PixiExternalPythonOperator` does.
+- `BasePixiDecoratedOperator`, in `airflow.providers.pixi.decorators.pixi`, is the TaskFlow half of every
+  decorator that ships a function. Combine it with a Pixi operator to build a decorator for it.
+
 ## 0.0.1
 
 Initial version of the provider.

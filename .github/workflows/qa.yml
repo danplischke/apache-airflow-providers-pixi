@@ -157,7 +157,8 @@ jobs:
         run: |
           uv venv --python 3.12
           uv pip install "apache-airflow==${AIRFLOW_VERSION}" apache-airflow-providers-standard \
-            apache-airflow-providers-cncf-kubernetes apache-airflow-providers-common-compat \
+            apache-airflow-providers-cncf-kubernetes apache-airflow-providers-docker \
+            apache-airflow-providers-common-compat \
             pytest pyyaml jsonschema tomlkit "packaging>=22" \
             -c "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt"
           uv pip install --no-deps -e .
