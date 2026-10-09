@@ -11,7 +11,7 @@ from airflow.sdk import DAG, Param, task
 
 from airflow.providers.pixi.operators.bash import PixiBashOperator
 from airflow.providers.pixi.operators.pixi import PixiOperator, PixiShortCircuitOperator
-from airflow.providers.pixi.operators.task import PixiTaskOperator
+from airflow.providers.pixi.operators.project_task import PixiProjectTaskOperator
 from airflow.providers.pixi.sensors.pixi import PixiSensor
 
 PROJECT = "../project"
@@ -84,7 +84,7 @@ with DAG(
         bash_command=f"sleep 15 && touch {MARKER}",
     )
 
-    describe = PixiTaskOperator(task_id="describe", pixi_project_path=PROJECT, task="describe", task_args=values)
+    describe = PixiProjectTaskOperator(task_id="describe", pixi_project_path=PROJECT, task="describe", task_args=values)
 
     @task.pixi_branch(pixi_project_path=PROJECT)
     def pick_by_mean(summary: dict) -> str:

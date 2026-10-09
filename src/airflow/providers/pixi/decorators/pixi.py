@@ -5,18 +5,34 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from airflow.providers.pixi.operators.pixi import PixiOperator
+from airflow.providers.pixi.operators.pixi import BasePixiPythonOperator, PixiOperator
 from airflow.sdk.bases.decorator import DecoratedOperator, task_decorator_factory
 
 
-class PixiDecoratedOperator(DecoratedOperator, PixiOperator):  # type: ignore[misc]
-    """``@task.pixi``: run the function inside a Pixi environment."""
+class BasePixiDecoratedOperator(DecoratedOperator):
+    """The TaskFlow half of a decorator that ships the function to a Pixi environment.
 
-    custom_operator_name = "@task.pixi"
-    # PixiOperator's, which include DecoratedOperator's op_args and op_kwargs
-    template_fields = PixiOperator.template_fields
-    template_fields_renderers = PixiOperator.template_fields_renderers
-    get_python_source = PixiOperator.get_python_source
+    Combine it with an operator built on
+    [`BasePixiPythonOperator`][airflow.providers.pixi.operators.pixi.BasePixiPythonOperator], as
+    ``class PixiDecoratedOperator(BasePixiDecoratedOperator, PixiOperator)``, and set ``custom_operator_name``. The
+    subclass gets the operator's ``template_fields``, ``template_fields_renderers`` and ``get_python_source`` in place
+    of ``DecoratedOperator``'s, unless a class in front of ``DecoratedOperator`` sets them.
+    """
+
+    _FROM_THE_OPERATOR = ("template_fields", "template_fields_renderers", "get_python_source")
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        operator = next(
+            (c for c in cls.__mro__ if issubclass(c, BasePixiPythonOperator) and not issubclass(c, DecoratedOperator)),
+            None,
+        )
+        if operator is None:
+            return
+        for name in cls._FROM_THE_OPERATOR:
+            owner = next(c for c in cls.__mro__ if name in c.__dict__)
+            if owner in DecoratedOperator.__mro__:
+                setattr(cls, name, operator.__dict__.get(name, getattr(operator, name)))
 
     def __init__(
         self,
@@ -27,7 +43,7 @@ class PixiDecoratedOperator(DecoratedOperator, PixiOperator):  # type: ignore[mi
         **kwargs: Any,
     ) -> None:
         # DecoratedOperator sets op_args/op_kwargs itself, then calls the upstream
-        # __init__ with kwargs_to_upstream; PixiOperator must see the same values
+        # __init__ with kwargs_to_upstream; the Pixi operator must see the same values
         # or it resets them and XComArg dependencies are lost.
         super().__init__(
             kwargs_to_upstream={
@@ -40,6 +56,12 @@ class PixiDecoratedOperator(DecoratedOperator, PixiOperator):  # type: ignore[mi
             op_kwargs=op_kwargs,
             **kwargs,
         )
+
+
+class PixiDecoratedOperator(BasePixiDecoratedOperator, PixiOperator):  # type: ignore[misc]
+    """``@task.pixi``: run the function inside a Pixi environment."""
+
+    custom_operator_name = "@task.pixi"
 
 
 def pixi_task(

@@ -53,7 +53,7 @@ class PixiBashOperator(PixiRunEnvMixin, BasePixiOperator, BashOperator):
         """Return the command that runs in place of ``bash_command``: ``pixi run ... bash -c <bash_command>``.
 
         Called when the task runs, as templated fields are then rendered. Override it to run something else
-        through pixi, as [`PixiTaskOperator`][airflow.providers.pixi.operators.task.PixiTaskOperator] does.
+        through pixi, as [`PixiProjectTaskOperator`][airflow.providers.pixi.operators.project_task.PixiProjectTaskOperator] does.
         """
         return [*self.pixi_run_command(pixi, manifest), "bash", "-c", str(self.bash_command)]
 

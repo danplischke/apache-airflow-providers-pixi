@@ -3,42 +3,19 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable
 from typing import Any
 
 
 @functools.cache
 def _decorated_operator_class() -> type:
+    from airflow.providers.pixi.decorators.pixi import BasePixiDecoratedOperator
     from airflow.providers.pixi.operators.kubernetes import PixiKubernetesPodOperator
-    from airflow.sdk.bases.decorator import DecoratedOperator
 
-    class PixiKubernetesDecoratedOperator(DecoratedOperator, PixiKubernetesPodOperator):  # type: ignore[misc]
+    class PixiKubernetesDecoratedOperator(BasePixiDecoratedOperator, PixiKubernetesPodOperator):  # type: ignore[misc]
         """``@task.pixi_kubernetes``: run the function inside a Pixi environment in a Kubernetes pod."""
 
         custom_operator_name = "@task.pixi_kubernetes"
-        template_fields = PixiKubernetesPodOperator.template_fields
-        template_fields_renderers = PixiKubernetesPodOperator.template_fields_renderers
-        get_python_source = PixiKubernetesPodOperator.get_python_source
-
-        def __init__(
-            self,
-            *,
-            python_callable: Callable[..., Any],
-            op_args: Sequence[Any] | None = None,
-            op_kwargs: Mapping[str, Any] | None = None,
-            **kwargs: Any,
-        ) -> None:
-            super().__init__(
-                kwargs_to_upstream={
-                    "python_callable": python_callable,
-                    "op_args": op_args,
-                    "op_kwargs": op_kwargs,
-                },
-                python_callable=python_callable,
-                op_args=op_args,
-                op_kwargs=op_kwargs,
-                **kwargs,
-            )
 
     return PixiKubernetesDecoratedOperator
 

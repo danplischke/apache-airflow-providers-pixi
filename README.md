@@ -1,7 +1,7 @@
 # apache-airflow-providers-pixi
 
 An Apache Airflow 3 provider that runs tasks inside [Pixi](https://pixi.sh)-managed environments,
-on the worker or in a Kubernetes pod, so a task can use conda-forge and PyPI packages that are not
+on the worker, in a Kubernetes pod or in a Docker container, so a task can use conda-forge and PyPI packages that are not
 installed on the worker.
 
 Documentation: https://danplischke.github.io/apache-airflow-providers-pixi/
@@ -12,6 +12,7 @@ Documentation: https://danplischke.github.io/apache-airflow-providers-pixi/
 ```bash
 pip install apache-airflow-providers-pixi
 pip install "apache-airflow-providers-pixi[cncf.kubernetes]"  # adds PixiKubernetesPodOperator
+pip install "apache-airflow-providers-pixi[docker]"  # adds PixiDockerOperator
 ```
 
 Requires Apache Airflow 3.1.2 or newer and Python 3.10 to 3.14 (3.14 needs Airflow 3.2). The
@@ -50,8 +51,10 @@ environment variables, errors, timeouts and caches.
 |---|---|
 | [`PixiOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/pixi/) / [`@task.pixi`](https://danplischke.github.io/apache-airflow-providers-pixi/decorators/pixi/) | runs a Python callable in a Pixi environment on the worker |
 | [`PixiBashOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/bash/) / `@task.pixi_bash` | runs a Bash command in a Pixi environment |
-| [`PixiTaskOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/task/) | runs a task from the manifest's `[tasks]` |
+| [`PixiProjectTaskOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/project_task/) | runs a task from the manifest's `[tasks]` |
 | [`PixiKubernetesPodOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/kubernetes/) / `@task.pixi_kubernetes` | runs a Python callable in a Pixi environment in a Kubernetes pod |
+| [`PixiDockerOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/docker/) / `@task.pixi_docker` | runs a Python callable in a Pixi environment in a Docker container |
+| [`PixiExternalPythonOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/external/) / `@task.pixi_external` | runs a Python callable with the Python of an installed Pixi environment, without pixi |
 | [`PixiBranchOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/branch/) / `@task.pixi_branch` | chooses the downstream tasks to follow |
 | [`PixiShortCircuitOperator`](https://danplischke.github.io/apache-airflow-providers-pixi/operators/branch/#short-circuit) / `@task.pixi_short_circuit` | skips downstream tasks when the callable returns a falsy value |
 | [`PixiSensor`](https://danplischke.github.io/apache-airflow-providers-pixi/sensors/pixi/) / `@task.pixi_sensor` | waits until the callable returns a truthy value |

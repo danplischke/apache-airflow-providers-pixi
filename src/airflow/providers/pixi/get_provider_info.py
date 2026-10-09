@@ -20,7 +20,9 @@ def get_provider_info() -> dict[str, object]:
                     "airflow.providers.pixi.operators.pixi",
                     "airflow.providers.pixi.operators.bash",
                     "airflow.providers.pixi.operators.kubernetes",
-                    "airflow.providers.pixi.operators.task",
+                    "airflow.providers.pixi.operators.project_task",
+                    "airflow.providers.pixi.operators.docker",
+                    "airflow.providers.pixi.operators.external",
                 ],
             }
         ],
@@ -79,5 +81,7 @@ def get_provider_info() -> dict[str, object]:
                 "name": "pixi_short_circuit",
                 "class-name": "airflow.providers.pixi.decorators.short_circuit.pixi_short_circuit_task",
             },
+            {"name": "pixi_docker", "class-name": "airflow.providers.pixi.decorators.docker.pixi_docker_task"},
+            {"name": "pixi_external", "class-name": "airflow.providers.pixi.decorators.external.pixi_external_task"},
         ],
     }

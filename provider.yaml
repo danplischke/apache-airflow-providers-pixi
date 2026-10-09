@@ -5,6 +5,7 @@ description: |
   Run Python callables inside `Pixi <https://pixi.sh>`__ environments.
 
 versions:
+  - 0.1.0
   - 0.0.1
 
 integrations:
@@ -18,7 +19,9 @@ operators:
       - airflow.providers.pixi.operators.pixi
       - airflow.providers.pixi.operators.bash
       - airflow.providers.pixi.operators.kubernetes
-      - airflow.providers.pixi.operators.task
+      - airflow.providers.pixi.operators.project_task
+      - airflow.providers.pixi.operators.docker
+      - airflow.providers.pixi.operators.external
 
 sensors:
   - integration-name: Pixi
@@ -66,3 +69,7 @@ task-decorators:
     class-name: airflow.providers.pixi.decorators.branch.pixi_branch_task
   - name: pixi_short_circuit
     class-name: airflow.providers.pixi.decorators.short_circuit.pixi_short_circuit_task
+  - name: pixi_docker
+    class-name: airflow.providers.pixi.decorators.docker.pixi_docker_task
+  - name: pixi_external
+    class-name: airflow.providers.pixi.decorators.external.pixi_external_task

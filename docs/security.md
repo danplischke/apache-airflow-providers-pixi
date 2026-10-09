@@ -33,10 +33,10 @@ as much as the DAG itself. The default `json` serializer does not have this prop
 
 ## Arguments of pixi tasks
 
-`PixiTaskOperator` passes each of `task_args` to pixi unchanged, but a task that declares `args` gets
+`PixiProjectTaskOperator` passes each of `task_args` to pixi unchanged, but a task that declares `args` gets
 their values substituted into its `cmd` without quoting, and pixi's task shell interprets the result.
 A value from `dag_run.conf`, a Param set when triggering, or another outside source can then run
-commands on the worker. See [Task arguments](operators/task.md#task-arguments).
+commands on the worker. See [Task arguments](operators/project_task.md#task-arguments).
 
 ## Cache directories
 

@@ -552,8 +552,10 @@ unset, so the tool's default applies. To share caches between workers, see the
 
 The environment arguments of this page (`pixi_project_path`, `pixi_toml_path`, `environment`,
 `lock_mode`, the inline manifest options, `env_cache_path` and `pixi_binary`) work the same way for the
-[Bash operator](bash.md), the [Task operator](task.md), the [Kubernetes pod operator](kubernetes.md) and
-the [sensor](../sensors/pixi.md).
+[Bash operator](bash.md), the [Project Task operator](project_task.md), the
+[Kubernetes pod operator](kubernetes.md), the [Docker operator](docker.md) and the [sensor](../sensors/pixi.md).
+The [External Python operator](external.md) runs an environment that is already installed, so only
+`pixi_project_path`, `pixi_toml_path` and `environment` apply to it.
 
 ## Reference
 

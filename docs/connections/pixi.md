@@ -92,7 +92,7 @@ PixiOperator(
 ```
 
 `pixi_conn_id` works for [`PixiOperator`](../operators/pixi.md), [`@task.pixi`](../decorators/pixi.md),
-[`PixiBashOperator`](../operators/bash.md), `@task.pixi_bash`, [`PixiTaskOperator`](../operators/task.md),
+[`PixiBashOperator`](../operators/bash.md), `@task.pixi_bash`, [`PixiProjectTaskOperator`](../operators/project_task.md),
 [`PixiSensor`](../sensors/pixi.md) and `@task.pixi_sensor`, and can be set for every task through
 `default_args`. Two connections for the same host fail the task.
 

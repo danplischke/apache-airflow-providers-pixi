@@ -37,10 +37,13 @@ dependencies = [
 "cncf.kubernetes" = [
     "apache-airflow-providers-cncf-kubernetes>=10.9.0",
 ]
+docker = [
+    "apache-airflow-providers-docker>=4.4.4",
+]
 
 [dependency-groups]
 dev = [
-    "apache-airflow-providers-pixi[cncf.kubernetes]",
+    "apache-airflow-providers-pixi[cncf.kubernetes,docker]",
     "jsonschema>=4.19.1",
     "pre-commit>=3.5",
     "pytest>=7.0",

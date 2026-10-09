@@ -1,4 +1,4 @@
-"""Unit tests for PixiTaskOperator.
+"""Unit tests for PixiProjectTaskOperator.
 
 The fake pixi does not read ``[tasks]``: it runs whatever follows the manifest options as a command, as pixi does
 for a name that is not a task. So the tests' tasks are commands, and they check what reaches pixi.
@@ -13,15 +13,15 @@ from pathlib import Path
 import pytest
 from airflow.sdk import DAG, task
 
-from airflow.providers.pixi.operators.task import PixiTaskOperator
+from airflow.providers.pixi.operators.project_task import PixiProjectTaskOperator
 from airflow.providers.pixi.utils.compat import AirflowException, AirflowSkipException
 
 PRINT_ARGS = "import json, sys; print(json.dumps(sys.argv[1:]))"
 
 
-def make(fake_pixi, tmp_path: Path, **kwargs) -> PixiTaskOperator:
+def make(fake_pixi, tmp_path: Path, **kwargs) -> PixiProjectTaskOperator:
     kwargs.setdefault("pixi_project_path", str(tmp_path))
-    return PixiTaskOperator(task_id="t", pixi_binary=str(fake_pixi.path), **kwargs)
+    return PixiProjectTaskOperator(task_id="t", pixi_binary=str(fake_pixi.path), **kwargs)
 
 
 def test_the_task_and_its_arguments_follow_the_manifest(fake_pixi, tmp_path: Path) -> None:
@@ -118,7 +118,7 @@ def test_task_args_can_come_from_another_task(fake_pixi, tmp_path: Path) -> None
         def arguments() -> list[str]:
             return ["--epochs", "3"]
 
-        PixiTaskOperator(task_id="train", pixi_project_path=str(tmp_path), task="echo", task_args=arguments())
+        PixiProjectTaskOperator(task_id="train", pixi_project_path=str(tmp_path), task="echo", task_args=arguments())
 
     assert dag.get_task("train").upstream_task_ids == {"arguments"}
 
@@ -134,7 +134,7 @@ def test_run_env_parameters_come_from_default_args(fake_pixi, tmp_path: Path, mo
         "env_from_variables": {"API_URL": "api_url"},
     }
     with DAG("d", default_args=default_args):
-        op = PixiTaskOperator(
+        op = PixiProjectTaskOperator(
             task_id="t",
             pixi_project_path=str(tmp_path),
             task="python",
@@ -144,3 +144,21 @@ def test_run_env_parameters_come_from_default_args(fake_pixi, tmp_path: Path, mo
     call = fake_pixi.calls[-1]
     assert call["argv"][3] == "--frozen"
     assert call["env"]["PIXI_CACHE_DIR"] == "/shared/pixi"
+
+
+def test_the_old_name_still_works_with_a_deprecation_warning(fake_pixi, tmp_path: Path) -> None:
+    import airflow.providers.pixi
+    import airflow.providers.pixi.operators
+    from airflow.providers.pixi.operators.task import PixiTaskOperator
+    from airflow.providers.pixi.utils.compat import AirflowProviderDeprecationWarning
+
+    assert airflow.providers.pixi.PixiTaskOperator is PixiTaskOperator
+    assert airflow.providers.pixi.operators.PixiTaskOperator is PixiTaskOperator
+    with pytest.warns(AirflowProviderDeprecationWarning, match="use PixiProjectTaskOperator") as warned:
+        op = PixiTaskOperator(
+            task_id="t", pixi_binary=str(fake_pixi.path), pixi_project_path=str(tmp_path), task="echo", task_args=["hi"]
+        )
+    assert warned[0].filename == __file__  # the DAG's line, not Airflow's __init__ wrapper
+    assert isinstance(op, PixiProjectTaskOperator)
+    assert op.custom_operator_name == "PixiTask"  # existing DAGs keep their label in the UI
+    assert op.execute({}) == "hi"

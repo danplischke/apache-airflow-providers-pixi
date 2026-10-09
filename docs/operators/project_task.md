@@ -1,6 +1,6 @@
-# Pixi Task Operator
+# Pixi Project Task Operator
 
-Use the [`PixiTaskOperator`][airflow.providers.pixi.operators.task.PixiTaskOperator] to run a task
+Use the [`PixiProjectTaskOperator`][airflow.providers.pixi.operators.project_task.PixiProjectTaskOperator] to run a task
 defined in the `[tasks]` of a [Pixi](https://pixi.sh) manifest, as `pixi run <task>` does on the
 command line. It is built on the [Pixi Bash Operator](bash.md) and accepts its arguments, except
 `bash_command`.
@@ -22,9 +22,9 @@ cmd = "python report.py --day {{ day }} --format {{ format }}"
 run one of them with `task`, and pass its arguments with `task_args`:
 
 ```python
-from airflow.providers.pixi.operators.task import PixiTaskOperator
+from airflow.providers.pixi.operators.project_task import PixiProjectTaskOperator
 
-PixiTaskOperator(
+PixiProjectTaskOperator(
     task_id="report",
     pixi_project_path="/repo",
     lock_mode="locked",
@@ -80,10 +80,10 @@ Pixi matches `task_args` against the task's definition, as described in
 
 ```python
 # python train.py --epochs 3
-PixiTaskOperator(task_id="train", pixi_project_path="/repo", task="train", task_args=["--epochs", "3"])
+PixiProjectTaskOperator(task_id="train", pixi_project_path="/repo", task="train", task_args=["--epochs", "3"])
 
 # python report.py --day 2026-01-01 --format html --verbose
-PixiTaskOperator(
+PixiProjectTaskOperator(
     task_id="report",
     pixi_project_path="/repo",
     task="report",
@@ -100,7 +100,7 @@ def arguments() -> list[str]:
     return ["--epochs", "3"]
 
 
-PixiTaskOperator(task_id="train", pixi_project_path="/repo", task="train", task_args=arguments())
+PixiProjectTaskOperator(task_id="train", pixi_project_path="/repo", task="train", task_args=arguments())
 ```
 
 A `task_args` item that ends with `.sh` or `.bash` is an argument, not a template file to load.
@@ -132,4 +132,4 @@ as `task_args` instead, from a template or from another task's output as shown a
 ## Reference
 
 For the full list of parameters, see the
-[`PixiTaskOperator` API reference][airflow.providers.pixi.operators.task.PixiTaskOperator].
+[`PixiProjectTaskOperator` API reference][airflow.providers.pixi.operators.project_task.PixiProjectTaskOperator].

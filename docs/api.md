@@ -10,15 +10,30 @@
       members: [PixiBashOperator]
       toc_label: operators.bash
 
-::: airflow.providers.pixi.operators.task
+::: airflow.providers.pixi.operators.project_task
     options:
-      members: [PixiTaskOperator]
-      toc_label: operators.task
+      members: [PixiProjectTaskOperator]
+      toc_label: operators.project_task
 
 ::: airflow.providers.pixi.operators.kubernetes
     options:
       members: [PixiKubernetesPodOperator, DEFAULT_IMAGE, DEFAULT_POD_PLATFORMS, MAX_ENV_VALUE_BYTES]
       toc_label: operators.kubernetes
+
+::: airflow.providers.pixi.operators.docker
+    options:
+      members: [PixiDockerOperator]
+      toc_label: operators.docker
+
+::: airflow.providers.pixi.operators.container
+    options:
+      members: [BasePixiContainerOperator, DEFAULT_IMAGE, DEFAULT_CONTAINER_PLATFORMS, MAX_ENV_VALUE_BYTES]
+      toc_label: operators.container
+
+::: airflow.providers.pixi.operators.external
+    options:
+      members: [PixiExternalPythonOperator, environment_prefix, environment_python]
+      toc_label: operators.external
 
 ::: airflow.providers.pixi.sensors.pixi
     options:
@@ -27,7 +42,7 @@
 
 ::: airflow.providers.pixi.decorators.pixi
     options:
-      members: [pixi_task, PixiDecoratedOperator]
+      members: [pixi_task, PixiDecoratedOperator, BasePixiDecoratedOperator]
       toc_label: decorators.pixi
 
 ::: airflow.providers.pixi.decorators.bash
@@ -39,6 +54,16 @@
     options:
       members: [pixi_kubernetes_task]
       toc_label: decorators.kubernetes
+
+::: airflow.providers.pixi.decorators.docker
+    options:
+      members: [pixi_docker_task]
+      toc_label: decorators.docker
+
+::: airflow.providers.pixi.decorators.external
+    options:
+      members: [pixi_external_task]
+      toc_label: decorators.external
 
 ::: airflow.providers.pixi.decorators.sensor
     options:
