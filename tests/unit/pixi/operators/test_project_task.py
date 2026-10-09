@@ -147,17 +147,18 @@ def test_run_env_parameters_come_from_default_args(fake_pixi, tmp_path: Path, mo
 
 
 def test_the_old_name_still_works_with_a_deprecation_warning(fake_pixi, tmp_path: Path) -> None:
-    from airflow.exceptions import AirflowProviderDeprecationWarning
-
     import airflow.providers.pixi
     import airflow.providers.pixi.operators
     from airflow.providers.pixi.operators.task import PixiTaskOperator
+    from airflow.providers.pixi.utils.compat import AirflowProviderDeprecationWarning
 
     assert airflow.providers.pixi.PixiTaskOperator is PixiTaskOperator
     assert airflow.providers.pixi.operators.PixiTaskOperator is PixiTaskOperator
-    with pytest.warns(AirflowProviderDeprecationWarning, match="use PixiProjectTaskOperator"):
+    with pytest.warns(AirflowProviderDeprecationWarning, match="use PixiProjectTaskOperator") as warned:
         op = PixiTaskOperator(
             task_id="t", pixi_binary=str(fake_pixi.path), pixi_project_path=str(tmp_path), task="echo", task_args=["hi"]
         )
+    assert warned[0].filename == __file__  # the DAG's line, not Airflow's __init__ wrapper
     assert isinstance(op, PixiProjectTaskOperator)
+    assert op.custom_operator_name == "PixiTask"  # existing DAGs keep their label in the UI
     assert op.execute({}) == "hi"

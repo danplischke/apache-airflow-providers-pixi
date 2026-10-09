@@ -548,20 +548,22 @@ class PixiRunEnvMixin(BaseOperator):
 
 
 class PixiSubprocessMixin(PixiRunEnvMixin):
-    """Run the runner with pixi on the worker, streaming its output to the task log.
+    """Run the runner with the environment's Python on the worker, streaming its output to the task log.
 
-    Accepts every [`PixiRunEnvMixin`][PixiRunEnvMixin] argument, plus:
+    The Python is started by [`python_command`][python_command]: ``pixi run ... python`` unless a subclass starts it
+    another way, as [`PixiExternalPythonOperator`][airflow.providers.pixi.operators.external.PixiExternalPythonOperator]
+    does without pixi. Accepts every [`PixiRunEnvMixin`][PixiRunEnvMixin] argument, plus:
 
     :param env_vars: environment variables for the run, on top of all others. Not templated, so secrets
         set here are never rendered into the UI.
-    :param skip_on_exit_code: exit codes of ``pixi run`` that skip the task instead of failing it, as for
+    :param skip_on_exit_code: exit codes of the run that skip the task instead of failing it, as for
         ``PythonVirtualenvOperator``. The callable chooses one with ``sys.exit(code)``; an exception it raises
         exits with 1, and so does pixi when it cannot prepare the environment.
 
     An exception raised by the callable fails the task with
     [`PixiCallableError`][airflow.providers.pixi.exceptions.PixiCallableError], which names the callable and the
-    exception; other failures of the run fail it with pixi's exit code and the last lines of output.
-    ``execution_timeout`` and killing the task stop pixi and everything it started.
+    exception; other failures of the run fail it with the run's exit code and the last lines of output.
+    ``execution_timeout`` and killing the task stop the run and everything it started.
     """
 
     template_fields: Sequence[str] = PixiRunEnvMixin.template_fields

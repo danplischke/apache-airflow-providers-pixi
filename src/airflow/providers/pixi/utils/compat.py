@@ -28,6 +28,11 @@ except ImportError:
     from airflow.exceptions import AirflowNotFoundException  # type: ignore[no-redef]
 
 try:
+    from airflow.sdk.exceptions import AirflowProviderDeprecationWarning
+except ImportError:
+    from airflow.exceptions import AirflowProviderDeprecationWarning  # type: ignore[no-redef]
+
+try:
     from airflow.sdk.bases.decorator import determine_kwargs
 except ImportError:
     from airflow.utils.operator_helpers import determine_kwargs  # type: ignore[no-redef]
@@ -49,6 +54,7 @@ __all__ = (
     "SET_DURING_EXECUTION",
     "AirflowException",
     "AirflowNotFoundException",
+    "AirflowProviderDeprecationWarning",
     "AirflowSensorTimeout",
     "AirflowSkipException",
     "AirflowTaskTimeout",
