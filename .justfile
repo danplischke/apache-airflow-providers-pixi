@@ -154,8 +154,13 @@ bump ver:
     from pathlib import Path
 
     ver = "{{ ver }}"
-    if not re.fullmatch(r"\d+\.\d+\.\d+((a|b|rc)\d+)?", ver):
+    pattern = r"(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?"
+    if not re.fullmatch(pattern, ver):
         raise SystemExit(f"not a version: {ver}")
+
+    def key(v):
+        major, minor, patch, pre, num = re.fullmatch(pattern, v).groups()
+        return (int(major), int(minor), int(patch), {"a": 0, "b": 1, "rc": 2, None: 3}[pre], int(num or 0))
 
     provider = Path("provider.yaml")
     text = provider.read_text()
@@ -163,14 +168,17 @@ bump ver:
     if versions is None:
         raise SystemExit("provider.yaml has no versions list")
     listed = re.findall(r"^  - (.*)$", versions.group(1), flags=re.M)
-    if ver not in listed:
-        provider.write_text(text[: versions.start(1)] + f"  - {ver}\n" + text[versions.start(1) :])
-    elif listed[0] != ver:
+    if ver in listed and listed[0] != ver:
         raise SystemExit(f"provider.yaml lists {ver} after {listed[0]}")
+    if listed and ver not in listed and key(ver) < key(listed[0]):
+        raise SystemExit(f"{ver} is lower than {listed[0]}, the newest version in provider.yaml")
 
+    # check before writing, so a failed bump leaves provider.yaml untouched
     headings = re.findall(r"^## (.+?)\s*$", Path("docs/changelog.md").read_text(), flags=re.M)
     if not headings or headings[0] != ver:
-        raise SystemExit(f"provider.yaml is at {ver}; add '## {ver}' as the first section of docs/changelog.md")
+        raise SystemExit(f"add '## {ver}' as the first section of docs/changelog.md, then run `just bump {ver}` again")
+    if ver not in listed:
+        provider.write_text(text[: versions.start(1)] + f"  - {ver}\n" + text[versions.start(1) :])
     print(f"provider.yaml and docs/changelog.md are at {ver}; merge to main, then run `just release {ver}`")
 
 # Tag and push v<ver> from a clean main; the release workflow builds and publishes it
