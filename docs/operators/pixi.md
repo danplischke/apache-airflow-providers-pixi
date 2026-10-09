@@ -179,8 +179,17 @@ PixiOperator(
 In pip strings, versions, extras, git and URL requirements are supported, and blank lines and comments
 are skipped. Pip options such as `-r` or `--index-url` are not: set indexes under `[pypi-options]` in a
 `pixi.toml` and use `pixi_project_path` or `pixi_toml_path`. Environment markers and a package listed
-twice are rejected too. `pypi_dependencies` is templated; without templates it is checked when the DAG
-is parsed, otherwise when the task runs.
+twice are rejected too. `pypi_dependencies` is templated. A value with no Jinja markup (`{{ }}`, `{% %}`
+or `{# #}`) is checked when the DAG is parsed; a templated one is checked after it is rendered, when the
+task runs. A requirements file in the DAG's `template_searchpath` can be included as it is:
+
+```python
+PixiOperator(
+    task_id="report",
+    pypi_dependencies="{% include 'requirements.txt' %}",
+    python_callable=report,
+)
+```
 
 If an inline manifest has PyPI packages but no `python` dependency, it gets the worker's Python
 version, as a virtualenv would. `pypi_dependencies` can't extend a project or manifest file; add the

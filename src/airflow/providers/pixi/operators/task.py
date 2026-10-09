@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Any, ClassVar
 
 from airflow.providers.pixi.operators.bash import PixiBashOperator
-from airflow.providers.pixi.operators.pixi import BasePixiOperator, PixiRunEnvMixin
+from airflow.providers.pixi.operators.pixi import BasePixiOperator, PixiRunEnvMixin, _needs_rendering
 from airflow.providers.pixi.utils.compat import SET_DURING_EXECUTION, AirflowException
 
 
@@ -48,7 +48,7 @@ class PixiTaskOperator(PixiBashOperator):
         super().__init__(bash_command=SET_DURING_EXECUTION, **kwargs)
         if task is None or (isinstance(task, str) and not task.strip()):
             raise ValueError(f"task must be the name of a task of the manifest, not {task!r}")
-        if isinstance(task_args, str) and "{{" not in task_args:
+        if isinstance(task_args, str) and not _needs_rendering(task_args):
             raise TypeError(f"task_args must be a list of arguments, such as [{task_args!r}], not a string")
         if self.inline_manifest:
             raise ValueError(

@@ -60,9 +60,9 @@ Initial version of the provider.
   DAG bundle. In a pod, a relative path is relative to the image's working directory instead.
 - `pypi_dependencies` (templated) takes the dict of `[pypi-dependencies]`, or pip requirement strings as
   for `@task.virtualenv`: a list, or one string that may hold several lines, such as a rendered
-  requirements file. Pip options, environment markers and a package listed twice are rejected, when the
-  DAG is parsed if nothing in it is templated. An inline manifest with PyPI packages but no `python`
-  gets the worker's Python version.
+  requirements file. Pip options, environment markers and a package listed twice are rejected: when the
+  DAG is parsed if the value has no Jinja markup (`{{ }}`, `{% %}` or `{# #}`), after rendering otherwise.
+  An inline manifest with PyPI packages but no `python` gets the worker's Python version.
 - Reuse of inline environments across runs with `env_cache_path`.
 
 ### Calling the function

@@ -677,6 +677,50 @@ def test_templated_pip_requirements_are_checked_once_rendered(fake_pixi) -> None
         op.inline_manifest_toml()
 
 
+@pytest.mark.parametrize(
+    ("pypi_dependencies", "params", "expected"),
+    [
+        ("pandas\n{% if params.gpu %}torch{% endif %}", {"gpu": True}, {"pandas": "*", "torch": "*"}),
+        (["pandas", "{% if params.gpu %}torch{% endif %}"], {"gpu": True}, {"pandas": "*", "torch": "*"}),
+        ("pandas{# pinned by the platform team #}", {}, {"pandas": "*"}),
+    ],
+)
+def test_pip_requirements_with_jinja_statements_are_checked_once_rendered(
+    fake_pixi, pypi_dependencies, params, expected
+) -> None:
+    op = make(fake_pixi, pypi_dependencies=pypi_dependencies, dependencies=None)
+    op.render_template_fields({"params": params})
+    assert parse_toml(op.inline_manifest_toml())["pypi-dependencies"] == expected
+
+
+def test_pip_requirements_from_an_included_requirements_file(fake_pixi, tmp_path: Path) -> None:
+    (tmp_path / "requirements.txt").write_text("pandas>=2\nrequests\n")
+    with DAG("d", template_searchpath=str(tmp_path)):
+        op = make(fake_pixi, pypi_dependencies="{% include 'requirements.txt' %}", dependencies=None)
+    op.render_template_fields({})
+    assert parse_toml(op.inline_manifest_toml())["pypi-dependencies"] == {"pandas": ">=2", "requests": "*"}
+
+    (tmp_path / "requirements.txt").write_text("pandas\n--index-url x\n")
+    op.pypi_dependencies = "{% include 'requirements.txt' %}"
+    op.render_template_fields({})
+    with pytest.raises(ValueError, match="pip options"):
+        op.inline_manifest_toml()
+
+
+def test_environment_and_lock_mode_with_jinja_statements_are_checked_once_rendered(fake_pixi) -> None:
+    op = make(
+        fake_pixi,
+        python_callable=add,
+        op_args=[1],
+        environment="{% if params.gpu %}cuda{% endif %}",
+        lock_mode="{% if params.pin %}locked{% endif %}",
+    )
+    op.render_template_fields({"params": {"gpu": False, "pin": True}})
+    with pytest.raises(AirflowException, match="needs a pixi.lock"):
+        run(op)
+    assert fake_pixi.calls == []
+
+
 def test_pypi_dependencies_alone_make_an_inline_manifest_with_the_workers_python(fake_pixi) -> None:
     run(
         make(
