@@ -241,12 +241,10 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Install pixi
-        env:
-          PIXI_VERSION: ${{ matrix.pixi-version }}
-          PIXI_NO_PATH_UPDATE: "1"
-        run: |
-          curl -fsSL https://pixi.sh/install.sh | bash
-          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0 — https://github.com/prefix-dev/setup-pixi/releases/tag/v0.11.0
+        with:
+          pixi-version: ${{ matrix.pixi-version }}
+          run-install: false
 
       - name: Run integration tests
         env:
@@ -273,12 +271,10 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Install pixi
-        env:
-          PIXI_VERSION: v0.81.0
-          PIXI_NO_PATH_UPDATE: "1"
-        run: |
-          curl -fsSL https://pixi.sh/install.sh | bash
-          echo "$HOME/.pixi/bin" >> "$GITHUB_PATH"
+        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0 — https://github.com/prefix-dev/setup-pixi/releases/tag/v0.11.0
+        with:
+          pixi-version: v0.81.0
+          run-install: false
 
       - name: Init Airflow DB
         env:

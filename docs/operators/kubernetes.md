@@ -64,7 +64,29 @@ worker.
 For a project in the image, `lock_mode="locked"` or `"frozen"` makes the pod install exactly what the
 image's `pixi.lock` pins, instead of solving again when the lock file is out of date. See
 [The lock file](pixi.md#the-lock-file). Installing the environment when the image is built saves the
-install on every run.
+install on every run. Build on the official image so pixi is already in it:
+
+```dockerfile
+FROM ghcr.io/prefix-dev/pixi:0.81.0
+
+WORKDIR /app
+COPY pixi.toml pixi.lock ./
+RUN pixi install --locked
+COPY . .
+```
+
+```python
+PixiKubernetesPodOperator(
+    task_id="train",
+    image="registry.example.com/pipelines/train:1.4",
+    pixi_project_path="/app",
+    lock_mode="locked",
+    python_callable="jobs:train",
+)
+```
+
+Copying `pixi.toml` and `pixi.lock` before the code keeps the installed environment in its own image
+layer, so a code change doesn't reinstall it.
 
 ## Inline environments
 

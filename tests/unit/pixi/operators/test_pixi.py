@@ -896,11 +896,6 @@ def test_unreadable_pixi_version_fails(tmp_path: Path) -> None:
         _resolve_pixi(str(binary))
 
 
-def test_ci_tests_against_the_minimum_pixi() -> None:
-    workflow = (Path(__file__).parents[4] / ".github" / "workflows" / "qa.yml").read_text()
-    assert f"PIXI_VERSION: v{MIN_PIXI_VERSION}" in workflow
-
-
 @pytest.mark.parametrize("lock_mode", ["locked", "frozen"])
 def test_lock_mode_is_passed_after_the_manifest(fake_pixi, tmp_path: Path, lock_mode: str) -> None:
     op = make(

@@ -504,13 +504,15 @@ run's output open, so the task waits for it until it exits or the timeout expire
 
 Pixi has to be installed on the workers, in version 0.81.0 or newer
 ([`MIN_PIXI_VERSION`][airflow.providers.pixi.utils.pixi.MIN_PIXI_VERSION]). The provider never
-downloads or installs it. Install it in the worker image, for example with your package manager or
-the [official installer](https://pixi.sh/latest/installation/), pinned to a version:
+downloads or installs it. Add it to the worker image pinned to a version, for example by copying it
+from the [official pixi image](https://github.com/prefix-dev/pixi-docker):
 
 ```dockerfile
-ENV PIXI_VERSION=v0.81.0 PIXI_HOME=/usr/local
-RUN curl -fsSL https://pixi.sh/install.sh | sh
+COPY --from=ghcr.io/prefix-dev/pixi:0.81.0 /usr/local/bin/pixi /usr/local/bin/pixi
 ```
+
+[Deployment](../deployment.md#installing-pixi-on-the-workers) has a full Dockerfile and other ways to
+install it.
 
 `pixi_binary` (default `pixi`) is a name on `PATH` or a path. Before the first run with a binary,
 the operator checks `pixi --version`. A task fails if pixi is missing or older than the minimum.

@@ -7,24 +7,27 @@ shared between runs, projects shipped with the DAGs, and credentials for private
 
 ## Installing pixi on the workers
 
-The provider never downloads or installs pixi. Install it when you build the worker image, pinned
-to a version (0.81.0 or newer), so every worker runs the same pixi:
+The provider never downloads or installs pixi. Add it when you build the worker image, pinned to a
+version (0.81.0 or newer), so every worker runs the same pixi. The simplest way is to copy the binary
+from the [official pixi image](https://github.com/prefix-dev/pixi-docker):
 
 ```dockerfile
-FROM apache/airflow:3.1.8-python3.12
+FROM apache/airflow:3.3.2-python3.12
 
-USER root
-ENV PIXI_VERSION=v0.81.0 PIXI_BIN_DIR=/usr/local/bin PIXI_NO_PATH_UPDATE=1
-RUN curl -fsSL https://pixi.sh/install.sh | sh && pixi --version
-USER airflow
+COPY --from=ghcr.io/prefix-dev/pixi:0.81.0 /usr/local/bin/pixi /usr/local/bin/pixi
+RUN pixi --version
 
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" apache-airflow-providers-pixi
 ```
 
-`PIXI_VERSION`, `PIXI_BIN_DIR` and `PIXI_NO_PATH_UPDATE` are options of the
-[installer](https://pixi.sh/latest/installation/). If pixi lives somewhere other than `PATH`, pass
-its path as `pixi_binary`, for example through `default_args`. A task fails with a clear error when
-pixi is missing or older than the minimum.
+The image's pixi is a static build, so it runs on any Linux base image, for `amd64` and `arm64`.
+Copying it needs neither root nor a script downloaded at build time. To pin the exact binary, add the
+image digest: `ghcr.io/prefix-dev/pixi:0.81.0@sha256:...`.
+
+You can also run the [installer](https://pixi.sh/latest/installation/) as root, with
+`PIXI_VERSION=v0.81.0 PIXI_BIN_DIR=/usr/local/bin PIXI_NO_PATH_UPDATE=1`. If pixi lives somewhere
+other than `PATH`, pass its path as `pixi_binary`, for example through `default_args`. A task fails
+with a clear error when pixi is missing or older than the minimum.
 
 Upgrade pixi deliberately: a `pixi.lock` written by a newer pixi may not be readable by an older one,
 so keep the workers' pixi at least as new as the one your team locks projects with.

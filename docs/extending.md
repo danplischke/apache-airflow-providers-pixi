@@ -128,52 +128,56 @@ class StartRunOperator(PixiOperator):
 A mixin that wraps `_PythonVirtualenvDecoratedOperator` through the members above works when it is put
 in front of `PixiDecoratedOperator` instead. What changes is where it adds packages: code that edits a
 virtualenv operator's `requirements` list needs a Pixi counterpart that calls `add_pypi_dependencies`.
-For example, lamindb-airflow's `RemoteLaminDBStepMixin` runs as a `@task.lamindb_pixi` step:
+Put that code in a method of its own, and override only the method:
 
 ```python
-from contextlib import contextmanager
+from packaging.requirements import Requirement
 
-from airflow.providers.lamindb.utils.remote import (
-    RemoteLaminDBStepMixin,
-    add_lamindb_requirement,
-    lamindb_requirement_lines,
-    lamindb_virtualenv_env,
-)
 from airflow.providers.pixi.decorators.pixi import PixiDecoratedOperator
 from airflow.providers.pixi.utils.manifest import pypi_dependencies_table
+from airflow.providers.standard.decorators.python_virtualenv import _PythonVirtualenvDecoratedOperator
 
 
-def ensure_lamindb_pypi_dependency(operator, remote, lamindb_version):
-    listed = list(pypi_dependencies_table(operator.pypi_dependencies))
-    requirements = list(listed)
-    if not lamindb_requirement_lines(requirements):
-        lamindb_version = lamindb_version or remote.instance_lamindb_version()
-    add_lamindb_requirement(requirements, lamindb_version)
-    operator.add_pypi_dependencies(*requirements[len(listed):])
+class TrackedStepMixin:
+    """Runs the step with the tracker's token; written for @task.virtualenv."""
+
+    def execute(self, context):
+        env_vars = self.env_vars
+        self.env_vars = {"MYTRACKER_TOKEN": get_token(), **(env_vars or {})}
+        self.add_tracker()
+        try:
+            return super().execute(context)
+        finally:
+            self.env_vars = env_vars
+
+    def add_tracker(self):
+        if all(Requirement(r).name != "mytracker" for r in self.requirements):
+            self.requirements = [*self.requirements, "mytracker>=1"]
 
 
-class LaminDBPixiDecoratedOperator(RemoteLaminDBStepMixin, PixiDecoratedOperator):
-    custom_operator_name = "@task.lamindb_pixi"
+class TrackedVirtualenvDecoratedOperator(TrackedStepMixin, _PythonVirtualenvDecoratedOperator):
+    custom_operator_name = "@task.tracked_virtualenv"
 
-    def __init__(self, *, lamindb_conn_id="lamindb_default", lamindb_instance=None,
-                 lamindb_version=None, **kwargs):
-        super().__init__(lamindb_conn_id=lamindb_conn_id, lamindb_instance=lamindb_instance, **kwargs)
-        self.lamindb_version = lamindb_version
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-    @contextmanager
-    def _lamindb_environment(self, remote):
-        if self.inline_manifest:  # a project environment brings lamindb itself, like a pod image
-            ensure_lamindb_pypi_dependency(self, remote, self.lamindb_version)
-        with lamindb_virtualenv_env(self, remote):
-            yield
+
+class TrackedPixiDecoratedOperator(TrackedStepMixin, PixiDecoratedOperator):
+    custom_operator_name = "@task.tracked_pixi"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def add_tracker(self):
+        # a project or manifest file has to bring mytracker itself
+        if self.inline_manifest and "mytracker" not in pypi_dependencies_table(self.pypi_dependencies):
+            self.add_pypi_dependencies("mytracker>=1")
 ```
 
-`ensure_lamindb_pypi_dependency` is the Pixi counterpart of lamindb-airflow's `ensure_lamindb_requirement`,
-which reads `operator.requirements` and assigns the list back. That helper stays as it is for the virtualenv
-decorator and the flow operators, which have no `pypi_dependencies`. The Pixi one reads the listed names
-with [`pypi_dependencies_table`][airflow.providers.pixi.utils.manifest.pypi_dependencies_table], which
-takes either form of `pypi_dependencies`, runs the same lamindb checks on a copy, and passes only what
-`add_lamindb_requirement` appended to `add_pypi_dependencies`.
+[`pypi_dependencies_table`][airflow.providers.pixi.utils.manifest.pypi_dependencies_table] reads either
+form of `pypi_dependencies`, a dict or pip strings, into a dict keyed by package name, so the check
+works whatever the DAG passed. As in the decorator above, save `pypi_dependencies` before
+`add_pypi_dependencies` and restore it afterwards if the task can be retried.
 
 Differences to keep in mind:
 

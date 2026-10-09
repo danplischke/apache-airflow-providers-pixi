@@ -49,3 +49,25 @@ def test_compat_job_covers_the_supported_airflow_versions() -> None:
     assert all(v in airflow.specifier for v in tested)
     floor = next(Version(s.version) for s in airflow.specifier if s.operator == ">=")
     assert min(tested).release[:2] == floor.release[:2]
+
+
+def test_pixi_minimum_is_the_version_used_everywhere() -> None:
+    from airflow.providers.pixi.operators.kubernetes import DEFAULT_IMAGE
+    from airflow.providers.pixi.utils.pixi import MIN_PIXI_VERSION
+
+    minimum = str(MIN_PIXI_VERSION)
+    assert DEFAULT_IMAGE == f"ghcr.io/prefix-dev/pixi:{minimum}"
+
+    docs = "\n".join(p.read_text() for p in (ROOT / "docs").rglob("*.md") if p.name != "changelog.md")
+    in_docs = set(re.findall(r"prefix-dev/pixi:(\d[\w.]*)", docs) + re.findall(r"PIXI_VERSION=v(\d[\w.]*)", docs))
+    assert in_docs == {minimum}
+
+    jobs = QA_WORKFLOW["jobs"]
+    assert f"v{minimum}" in jobs["integration-test"]["strategy"]["matrix"]["pixi-version"]
+    pinned = [
+        step["with"]["pixi-version"]
+        for job in jobs.values()
+        for step in job.get("steps", [])
+        if step.get("uses", "").startswith("prefix-dev/setup-pixi@") and "matrix" not in step["with"]["pixi-version"]
+    ]
+    assert pinned and set(pinned) == {f"v{minimum}"}
