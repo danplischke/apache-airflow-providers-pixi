@@ -45,7 +45,7 @@ except ImportError:
     from airflow.providers.standard.operators.branch import BranchMixIn  # type: ignore[no-redef]
     from airflow.providers.standard.utils.skipmixin import SkipMixin  # type: ignore[no-redef]
 
-__all__ = [
+__all__ = (
     "SET_DURING_EXECUTION",
     "AirflowException",
     "AirflowNotFoundException",
@@ -56,4 +56,4 @@ __all__ = [
     "SkipMixin",
     "context_merge",
     "determine_kwargs",
-]
+)

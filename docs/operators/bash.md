@@ -77,7 +77,9 @@ with DAG(
 
 When several sources set the same variable, the later one in this list wins:
 
-1. the worker's environment, unless `env` is set without `append_env=True`,
+1. the worker's environment, unless `env` is set without `append_env=True`, without the worker's
+   Python variables such as `PYTHONPATH` and with `PYTHONNOUSERSITE=1`
+   (see [Isolation from the worker's Python](pixi.md#isolation-from-the-workers-python)),
 2. the cache directory Variables,
 3. `env_from_variables` and `env_from_connections`,
 4. `env`,

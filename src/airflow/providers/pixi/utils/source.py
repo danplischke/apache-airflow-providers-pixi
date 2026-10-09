@@ -9,12 +9,10 @@ from collections.abc import Callable, Collection
 from typing import Any
 
 RUNNER_SCRIPT = """
-import importlib, json, pickle, sys
+import importlib, inspect, json, pickle, sys
 
 
 def with_context(fn, args, kwargs, context):
-    import inspect
-
     try:
         signature = inspect.signature(fn)
         bound = signature.bind_partial(*args, **kwargs).arguments
@@ -55,6 +53,17 @@ try:
     if spec.get("context"):
         kwargs = with_context(fn, spec["args"], kwargs, spec["context"])
     result = fn(*spec["args"], **kwargs)
+    if getattr(inspect, "isawaitable", lambda value: False)(result):
+        import asyncio
+
+        if hasattr(asyncio, "run") and asyncio.iscoroutine(result):
+            result = asyncio.run(result)
+        else:
+            loop = asyncio.new_event_loop()
+            try:
+                result = loop.run_until_complete(result)
+            finally:
+                loop.close()
     if serializer == "pickle" and sys.argv[4:] == ["json"]:
         import base64
 

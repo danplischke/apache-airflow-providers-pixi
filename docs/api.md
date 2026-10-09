@@ -2,7 +2,7 @@
 
 ::: airflow.providers.pixi.operators.pixi
     options:
-      members: [PixiOperator, PixiBranchOperator, PixiShortCircuitOperator, BasePixiPythonOperator, BasePixiOperator, PixiSubprocessMixin, PixiRunEnvMixin]
+      members: [PixiOperator, PixiBranchOperator, PixiShortCircuitOperator, BasePixiPythonOperator, BasePixiOperator, PixiSubprocessMixin, PixiRunEnvMixin, WORKER_PYTHON_VARIABLES]
       toc_label: operators.pixi
 
 ::: airflow.providers.pixi.operators.bash

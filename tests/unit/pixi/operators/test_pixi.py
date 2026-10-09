@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import functools
 import inspect
+import json
 import os
 import pickle
 import signal
@@ -872,3 +873,100 @@ def test_absolute_paths_and_tasks_without_a_dag_are_unchanged(fake_pixi, tmp_pat
     monkeypatch.chdir(tmp_path)
     run(make(fake_pixi, pixi_project_path="project", python_callable="json:dumps", op_args=[1]))
     assert os.path.realpath(fake_pixi.calls[-1]["argv"][2]) == os.path.realpath(tmp_path / "project")
+
+
+async def add_later(a, b=0, run_id=None):
+    import asyncio
+
+    await asyncio.sleep(0)
+    return {"sum": a + b, "run_id": run_id}
+
+
+async def fails_later():
+    import asyncio
+
+    await asyncio.sleep(0)
+    raise ValueError("bad input")
+
+
+def test_an_async_function_is_awaited(fake_pixi) -> None:
+    op = make(fake_pixi, python_callable=add_later, op_args=[2], op_kwargs={"b": 3})
+    assert op.execute({"ti": MagicMock(), "run_id": "manual_1"}) == {"sum": 5, "run_id": "manual_1"}
+
+
+def test_an_async_function_from_a_module_path_is_awaited(fake_pixi) -> None:
+    assert run(make(fake_pixi, python_callable="asyncio:sleep", op_args=[0, "slept"])) == "slept"
+
+
+def test_an_exception_in_an_async_function_names_it(fake_pixi) -> None:
+    with pytest.raises(PixiCallableError, match="fails_later raised ValueError: bad input"):
+        run(make(fake_pixi, python_callable=fails_later))
+
+
+def test_the_runner_awaits_without_asyncio_run(tmp_path: Path) -> None:
+    spec = tmp_path / "input"
+    output = tmp_path / "output"
+    spec.write_text(json.dumps({"module": "asyncio", "name": "sleep", "args": [0, "slept"], "kwargs": {}}))
+    script = "import asyncio\ndel asyncio.run\n" + RUNNER_SCRIPT
+    subprocess.run([sys.executable, "-c", script, "json", str(spec), str(output)], check=True)
+    assert json.loads(output.read_text()) == "slept"
+
+
+def returns_a_dict_with_attributes():
+    class Attributes(dict):
+        def __getattr__(self, name):
+            return self.get(name)
+
+    return Attributes(a=1)
+
+
+def returns_a_generator_coroutine():
+    import types
+
+    @types.coroutine
+    def done():
+        yield
+        return "done"
+
+    return done()
+
+
+def test_a_result_with_any_attribute_is_not_awaited(fake_pixi) -> None:
+    assert run(make(fake_pixi, python_callable=returns_a_dict_with_attributes)) == {"a": 1}
+
+
+def test_a_generator_based_coroutine_is_awaited(fake_pixi) -> None:
+    assert run(make(fake_pixi, python_callable=returns_a_generator_coroutine)) == "done"
+
+
+def python_settings_of_the_run():
+    import os
+
+    return {name: os.environ.get(name) for name in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "PYTHONNOUSERSITE")}
+
+
+def worker_site(tmp_path: Path) -> Path:
+    site = tmp_path / "worker_site"
+    site.mkdir()
+    (site / "worker_only.py").write_text("def value():\n    return 'from the worker'\n")
+    return site
+
+
+def test_the_workers_python_paths_do_not_reach_the_environment(fake_pixi, tmp_path: Path, monkeypatch) -> None:
+    _resolve_pixi(str(fake_pixi.path))
+    monkeypatch.setenv("PYTHONPATH", str(worker_site(tmp_path)))
+    monkeypatch.setenv("PYTHONHOME", str(tmp_path / "worker_home"))
+    monkeypatch.setenv("VIRTUAL_ENV", str(tmp_path / "worker_venv"))
+    assert run(make(fake_pixi, python_callable=python_settings_of_the_run)) == {
+        "PYTHONPATH": None,
+        "PYTHONHOME": None,
+        "VIRTUAL_ENV": None,
+        "PYTHONNOUSERSITE": "1",
+    }
+    with pytest.raises(PixiCallableError, match="ModuleNotFoundError: No module named 'worker_only'"):
+        run(make(fake_pixi, python_callable="worker_only:value"))
+
+
+def test_env_vars_can_set_pythonpath_for_the_environment(fake_pixi, tmp_path: Path) -> None:
+    op = make(fake_pixi, python_callable="worker_only:value", env_vars={"PYTHONPATH": str(worker_site(tmp_path))})
+    assert run(op) == "from the worker"

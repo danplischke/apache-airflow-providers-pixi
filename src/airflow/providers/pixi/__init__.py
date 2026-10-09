@@ -17,7 +17,7 @@ _EXPORTS = {
     "PixiTaskOperator": "airflow.providers.pixi.operators.task",
 }
 
-__all__ = [
+__all__ = (
     "PixiBashOperator",
     "PixiBranchOperator",
     "PixiCallableError",
@@ -27,7 +27,7 @@ __all__ = [
     "PixiShortCircuitOperator",
     "PixiTaskOperator",
     "__version__",
-]
+)
 
 
 def __getattr__(name: str) -> Any:

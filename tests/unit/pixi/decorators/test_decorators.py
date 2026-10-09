@@ -146,3 +146,18 @@ def test_pixi_task_imported_under_its_own_name_is_stripped(fake_pixi) -> None:
     op = dag.get_task("aliased")
     assert "pixi_task" not in op.get_python_source()
     assert op.execute({"ti": MagicMock()}) == 2
+
+
+def test_task_pixi_awaits_an_async_function(fake_pixi) -> None:
+    @dag
+    def test_dag():
+        @task.pixi(pixi_binary=str(fake_pixi.path), **INLINE)
+        async def double(x: int) -> int:
+            import asyncio
+
+            await asyncio.sleep(0)
+            return x * 2
+
+        double(21)
+
+    assert test_dag().get_task("double").execute({"ti": MagicMock()}) == 42
