@@ -5,10 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from airflow.sdk.bases.decorator import task_decorator_factory
-
 from airflow.providers.pixi.decorators.pixi import PixiDecoratedOperator
 from airflow.providers.pixi.operators.pixi import PixiShortCircuitOperator
+from airflow.sdk.bases.decorator import task_decorator_factory
 
 
 class PixiShortCircuitDecoratedOperator(PixiDecoratedOperator, PixiShortCircuitOperator):  # type: ignore[misc]

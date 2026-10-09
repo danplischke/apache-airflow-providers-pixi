@@ -10,10 +10,9 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from airflow.providers.pixi.utils.compat import AirflowException, AirflowNotFoundException
 from airflow.sdk import Connection, Variable
 from airflow.sdk.log import mask_secret
-
-from airflow.providers.pixi.utils.compat import AirflowException, AirflowNotFoundException
 
 CONNECTION_FIELDS = ("host", "login", "password", "schema", "port", "extra")
 """The fields ``env_from_connections`` can name after the connection id, as ``"<conn_id>.<field>"``."""

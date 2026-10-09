@@ -17,10 +17,9 @@ from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 from urllib.parse import urlsplit
 
+from airflow.providers.pixi.utils.compat import AirflowException
 from airflow.sdk import BaseHook
 from airflow.sdk.log import mask_secret
-
-from airflow.providers.pixi.utils.compat import AirflowException
 
 __all__ = ("AUTH_TYPES", "PixiCredentials", "PixiHook", "pixi_auth_env")
 

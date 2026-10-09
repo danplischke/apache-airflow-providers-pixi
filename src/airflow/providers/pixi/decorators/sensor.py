@@ -5,9 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from airflow.sdk.bases.decorator import get_unique_task_id, task_decorator_factory
-
 from airflow.providers.pixi.sensors.pixi import PixiSensor
+from airflow.sdk.bases.decorator import get_unique_task_id, task_decorator_factory
 
 
 class PixiDecoratedSensorOperator(PixiSensor):

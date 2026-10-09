@@ -19,7 +19,6 @@ from collections.abc import Callable, Container, Iterable, Iterator, Mapping, Se
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from airflow.sdk import BaseOperator
 from packaging.utils import canonicalize_name
 
 from airflow.providers.pixi.exceptions import PixiCallableError
@@ -36,6 +35,7 @@ from airflow.providers.pixi.utils.source import (
     function_source,
     validate_callable,
 )
+from airflow.sdk import BaseOperator
 
 __all__ = (
     "MIN_PIXI_VERSION",

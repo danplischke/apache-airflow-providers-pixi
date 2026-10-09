@@ -5,10 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any, ClassVar
 
-from airflow.sdk.bases.decorator import DecoratedOperator, task_decorator_factory
-
 from airflow.providers.pixi.operators.bash import PixiBashOperator
 from airflow.providers.pixi.utils.compat import SET_DURING_EXECUTION, context_merge, determine_kwargs
+from airflow.sdk.bases.decorator import DecoratedOperator, task_decorator_factory
 
 
 class PixiBashDecoratedOperator(DecoratedOperator, PixiBashOperator):

@@ -7,11 +7,10 @@ import shlex
 from collections.abc import Sequence
 from typing import Any
 
-from airflow.providers.standard.operators.bash import BashOperator
-
 from airflow.providers.pixi.operators.pixi import BasePixiOperator, PixiRunEnvMixin
 from airflow.providers.pixi.utils.compat import AirflowException
 from airflow.providers.pixi.utils.pixi import resolve_pixi
+from airflow.providers.standard.operators.bash import BashOperator
 
 
 class PixiBashOperator(PixiRunEnvMixin, BasePixiOperator, BashOperator):
