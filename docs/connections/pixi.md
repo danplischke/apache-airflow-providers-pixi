@@ -64,9 +64,9 @@ airflow connections add anaconda \
     --conn-extra '{"auth_type": "conda_token"}'
 ```
 
-A private PyPI index. The index itself goes into the manifest without credentials, for example
-`pypi_options={"extra-index-urls": ["https://pypi.example.com/simple"]}` or
-`[pypi-options]` in `pixi.toml`:
+A private PyPI index. The index itself goes, without credentials, into the `[pypi-options]` table
+of the project's `pixi.toml`, for example `extra-index-urls = ["https://pypi.example.com/simple"]`,
+and the task uses that project with `pixi_project_path` or `pixi_toml_path`:
 
 ```bash
 airflow connections add private_pypi \

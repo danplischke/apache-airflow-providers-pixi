@@ -45,7 +45,7 @@ then depends on the task, see [Task arguments](#task-arguments).
 
 - **Environment:** `pixi_project_path` or `pixi_toml_path`, with `environment` and `lock_mode`, as
   for the [Pixi Operator](pixi.md#choosing-the-environment). An inline manifest
-  (`dependencies`, `pypi_dependencies`, `requirements`) cannot define tasks and is rejected when the
+  (`dependencies`, `pypi_dependencies`) cannot define tasks and is rejected when the
   DAG is parsed.
 - **Return value:** the last line of output is the task's XCom (`output_processor` and
   `do_xcom_push` work as for `BashOperator`).

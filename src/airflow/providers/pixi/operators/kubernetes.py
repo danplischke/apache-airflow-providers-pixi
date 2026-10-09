@@ -20,9 +20,10 @@ from kubernetes.client import models as k8s
 
 from airflow.providers.pixi.exceptions import PixiCallableError
 from airflow.providers.pixi.operators.pixi import BasePixiPythonOperator
+from airflow.providers.pixi.runtime.runner import TERMINATION_KEY, TERMINATION_LOG_ENV
 from airflow.providers.pixi.utils.compat import AirflowException, AirflowSkipException
 from airflow.providers.pixi.utils.pixi import MIN_PIXI_VERSION
-from airflow.providers.pixi.utils.source import ERROR_SUFFIX, RUNNER_SCRIPT
+from airflow.providers.pixi.utils.source import RUNNER_SCRIPT
 
 DEFAULT_IMAGE = f"ghcr.io/prefix-dev/pixi:{MIN_PIXI_VERSION}"
 """The official pixi image in the minimum supported version."""
@@ -40,33 +41,6 @@ pod would fail to start; the margin leaves room for the variable's name.
 _INPUT_ENV = "PIXI_AIRFLOW_INPUT"
 _MANIFEST_ENV = "PIXI_AIRFLOW_MANIFEST"
 _RUNNER_ENV = "PIXI_AIRFLOW_RUNNER"
-_TERMINATION_KEY = "pixi_callable_error"
-_TERMINATION_MESSAGE_BYTES = 4000
-
-_POD_RUNNER = """
-import json, os, sys
-
-try:
-    exec(compile(RUNNER, "<string>", "exec"), {"__name__": "__main__"})
-finally:
-    error_path = sys.argv[3] + ERROR_SUFFIX
-    if os.path.exists(error_path):
-        try:
-            with open(error_path) as f:
-                error = json.load(f)
-            error["message"] = error["message"][:500]
-            trace = error["traceback"]
-            while True:
-                error["traceback"] = trace
-                data = json.dumps({KEY: error}, ensure_ascii=False).encode("utf-8")
-                if len(data) <= LIMIT or not trace:
-                    break
-                trace = trace[len(trace) // 4 + 1:]
-            with open(TERMINATION_LOG, "wb") as f:
-                f.write(data)
-        except Exception:
-            pass
-"""
 
 
 def _env_var_list(env_vars: Any) -> list[k8s.V1EnvVar]:
@@ -185,17 +159,6 @@ class PixiKubernetesPodOperator(BasePixiPythonOperator, KubernetesPodOperator):
             lines.append(f'mkdir -p {xcom_dir} && cp "$work/output" {xcom_dir}/return.json')
         return "\n".join(lines) + "\n"
 
-    def pod_runner(self) -> str:
-        """Return the Python code the pod runs in the environment: the runner, reporting exceptions to Kubernetes."""
-        constants = {
-            "RUNNER": RUNNER_SCRIPT,
-            "ERROR_SUFFIX": ERROR_SUFFIX,
-            "KEY": _TERMINATION_KEY,
-            "LIMIT": _TERMINATION_MESSAGE_BYTES,
-            "TERMINATION_LOG": self.termination_message_path,
-        }
-        return "".join(f"{name} = {value!r}\n" for name, value in constants.items()) + _POD_RUNNER
-
     def pod_env_vars(self, context: Mapping[str, Any] | None = None) -> list[k8s.V1EnvVar]:
         """Return the environment variables that carry the callable, its arguments and an inline manifest.
 
@@ -205,7 +168,8 @@ class PixiKubernetesPodOperator(BasePixiPythonOperator, KubernetesPodOperator):
         """
         env = {
             _INPUT_ENV: base64.b64encode(self.callable_input(context)).decode(),
-            _RUNNER_ENV: self.pod_runner(),
+            _RUNNER_ENV: RUNNER_SCRIPT,
+            TERMINATION_LOG_ENV: self.termination_message_path,
         }
         self._check_env_size(
             _INPUT_ENV,
@@ -244,7 +208,7 @@ class PixiKubernetesPodOperator(BasePixiPythonOperator, KubernetesPodOperator):
         status = next((s for s in statuses if s.name == self.base_container_name), None)
         terminated = status and status.state and status.state.terminated
         try:
-            return self._callable_error(json.loads(terminated.message)[_TERMINATION_KEY])  # type: ignore[union-attr]
+            return self._callable_error(json.loads(terminated.message)[TERMINATION_KEY])  # type: ignore[union-attr]
         except (AttributeError, KeyError, TypeError, ValueError):
             return None
 

@@ -26,7 +26,7 @@ def summarize(path: str) -> dict:
 PixiKubernetesPodOperator(
     task_id="summarize",
     namespace="jobs",
-    requirements=["pandas", "pyarrow"],
+    pypi_dependencies=["pandas", "pyarrow"],
     python_callable=summarize,
     op_args=["/data/input.parquet"],
 )
@@ -68,7 +68,7 @@ install on every run.
 
 ## Inline environments
 
-An inline manifest (`dependencies`, `pypi_dependencies`, `requirements`) is written in the pod and
+An inline manifest (`dependencies`, `pypi_dependencies`) is written in the pod and
 solved there on each run. To reuse it, mount a volume and point `env_cache_path` at it:
 
 ```python
@@ -76,7 +76,7 @@ from kubernetes.client import models as k8s
 
 PixiKubernetesPodOperator(
     task_id="summarize",
-    requirements=["pandas", "pyarrow"],
+    pypi_dependencies=["pandas", "pyarrow"],
     env_cache_path="/cache/pixi",
     volumes=[k8s.V1Volume(name="cache", persistent_volume_claim=k8s.V1PersistentVolumeClaimVolumeSource(claim_name="pixi-cache"))],
     volume_mounts=[k8s.V1VolumeMount(name="cache", mount_path="/cache")],
@@ -163,7 +163,7 @@ when the task runs through and when it resumes after deferring.
 from airflow.sdk import task
 
 
-@task.pixi_kubernetes(requirements=["pandas", "pyarrow"], namespace="jobs")
+@task.pixi_kubernetes(pypi_dependencies=["pandas", "pyarrow"], namespace="jobs")
 def summarize(path: str, ds=None) -> dict:
     import pandas as pd
 

@@ -87,7 +87,7 @@ class PixiHook(BaseHook):
     - ``"bearer_token"``: an ``Authorization: Bearer`` header, as prefix.dev uses.
     - ``"conda_token"``: a token in the channel URL, as anaconda.org and quetz use.
     - ``"basic_http"``: HTTP basic authentication, as Artifactory and Nexus use.
-    - ``"netrc"``: a netrc entry, for a PyPI index (``pypi_options`` or ``[pypi-options]``).
+    - ``"netrc"``: a netrc entry, for a PyPI index named in ``[pypi-options]`` of a project's ``pixi.toml``.
 
     :param pixi_conn_id: the connection id.
     """

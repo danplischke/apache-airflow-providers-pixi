@@ -119,10 +119,10 @@ def package_info():
     return {"python": platform.python_version(), "six": importlib.metadata.version("six")}
 
 
-def test_requirements_alone_get_the_workers_python() -> None:
+def test_pypi_dependencies_alone_get_the_workers_python() -> None:
     op = PixiOperator(
         task_id="t",
-        requirements=["six==1.16.0"],
+        pypi_dependencies=["six==1.16.0"],
         python_callable=package_info,
     )
     info = run(op)

@@ -50,7 +50,6 @@ the constraints file of any supported Airflow release can be used.
 |---|---|
 | `apache-airflow` | `>=3.1.2` |
 | `apache-airflow-providers-standard` | `>=1.9.1` |
-| `jsonschema` | `>=4.19.1` |
 | `packaging` | `>=22` |
 | `tomlkit` | `>=0.12` |
 
@@ -71,7 +70,7 @@ most, so Python 3.14 needs Airflow 3.2 or newer. CI runs the unit tests against 
 each supported Airflow minor with its constraints file, and against the lowest allowed versions; see
 [Testing against other Airflow versions](installing-from-sources.md#testing-against-other-airflow-versions).
 The Python inside the Pixi environment is independent of the worker's: it is whatever the manifest
-asks for.
+asks for, from Python 3.10 on, the oldest Python Airflow 3.1 supports.
 
 ## Quick start
 

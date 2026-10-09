@@ -2,8 +2,9 @@
 
 Other providers can build their own operators and task decorators on `PixiOperator` and `@task.pixi`,
 to run something around the user's function inside the Pixi environment: lineage tracking,
-credentials, logging, and so on. The extension points are the ones `@task.virtualenv` has, so a mixin
-written for `@task.virtualenv` usually works on `@task.pixi` unchanged.
+credentials, logging, and so on. The extension points are the ones `@task.virtualenv` has, except
+that packages are added with `add_pypi_dependencies()` instead of appending to `requirements`, so a
+mixin written for `@task.virtualenv` ports to `@task.pixi` with that one change.
 
 ## Extension points
 
@@ -13,11 +14,13 @@ written for `@task.virtualenv` usually works on `@task.pixi` unchanged.
 | `python_callable.__name__` | The name the runner calls in the shipped namespace. |
 | `op_args`, `op_kwargs` | Arguments of the call. Set them in `execute` to pass values computed at run time. |
 | `env_vars` | Environment variables for the run. Not templated, so secrets set here are never rendered into the UI. |
-| `requirements` | Pip requirement strings added to an inline manifest's `[pypi-dependencies]`. |
-| [`inline_manifest`][airflow.providers.pixi.operators.pixi.BasePixiOperator.inline_manifest] | Whether `requirements` can extend the environment. A project or manifest file has to bring the packages itself. |
+| [`add_pypi_dependencies(*requirements)`][airflow.providers.pixi.operators.pixi.BasePixiOperator.add_pypi_dependencies] | Adds pip requirement strings, such as `"mytracker>=1"`, to the inline manifest's `[pypi-dependencies]`, whether the DAG gave `pypi_dependencies` as a dict or as pip strings. Raises `AirflowException` for a project or manifest file, and `ValueError` for a package already listed. |
+| `pypi_dependencies` | The PyPI dependencies as the DAG gave them. `add_pypi_dependencies` assigns it a new value, so save it before and restore it afterwards. |
+| [`inline_manifest`][airflow.providers.pixi.operators.pixi.BasePixiOperator.inline_manifest] | Whether `add_pypi_dependencies` can extend the environment. A project or manifest file has to bring the packages itself. |
 | `custom_operator_name` | `@task.<name>` of your decorator. That decorator line is removed from the shipped source, like `@task.pixi`. A DAG that uses your factory function by its own name instead, as `@tracked_pixi_task(...)`, keeps that line in the source, which then fails in the environment with a `NameError`. Only this provider's functions (`pixi_task`, `pixi_kubernetes_task`, `pixi_sensor_task`, `pixi_branch_task`, `pixi_short_circuit_task`) are also removed by name. |
 
-Set `op_kwargs`, `env_vars` and `requirements` in `execute` before calling `super().execute`.
+Set `op_kwargs` and `env_vars`, and call `add_pypi_dependencies`, in `execute` before calling
+`super().execute`.
 
 The same members exist on [`PixiSensor`](sensors/pixi.md) and, except `env_vars` (use
 `KubernetesPodOperator`'s), on [`PixiKubernetesPodOperator`](operators/kubernetes.md), so a wrapper can
@@ -26,7 +29,7 @@ target the worker, a pod or a sensor. To run a Pixi environment some other way, 
 prepares the environment (`local_manifest()`, `inline_manifest_toml()`, `pixi_run_command()`), or
 [`BasePixiPythonOperator`][airflow.providers.pixi.operators.pixi.BasePixiPythonOperator], which adds the
 callable and its serialized input (`callable_input()`). Restore
-`env_vars` and `requirements` afterwards if you add to them, so a retry starts from the DAG's arguments.
+`env_vars` and `pypi_dependencies` afterwards if you add to them, so a retry starts from the DAG's arguments.
 
 ## A wrapping task decorator
 
@@ -43,7 +46,7 @@ from airflow.sdk.bases.decorator import task_decorator_factory
 RUNTIME = '''
 
 def _tracked(fn, args, kwargs, label):
-    import mytracker  # installed in the environment through requirements
+    import mytracker  # installed in the environment through add_pypi_dependencies
 
     with mytracker.span(label):
         return fn(*args, **kwargs)
@@ -60,15 +63,15 @@ class TrackedPixiDecoratedOperator(PixiDecoratedOperator):
         self.span_label = label
 
     def execute(self, context: Any) -> Any:
-        env_vars, requirements = self.env_vars, self.requirements
+        env_vars, pypi_dependencies = self.env_vars, self.pypi_dependencies
         self._config = {"label": self.span_label}
         self.env_vars = {"MYTRACKER_TOKEN": get_token(), **(env_vars or {})}
         if self.inline_manifest:
-            self.requirements = [*requirements, "mytracker>=1"]
+            self.add_pypi_dependencies("mytracker>=1")
         try:
             return super().execute(context)
         finally:
-            self.env_vars, self.requirements, self._config = env_vars, requirements, None
+            self.env_vars, self.pypi_dependencies, self._config = env_vars, pypi_dependencies, None
 
     def get_python_source(self) -> str:
         source = super().get_python_source()
@@ -122,8 +125,9 @@ class StartRunOperator(PixiOperator):
 ## Porting a `@task.virtualenv` wrapper
 
 A mixin that wraps `_PythonVirtualenvDecoratedOperator` through the members above works when it is put
-in front of `PixiDecoratedOperator` instead. For example, lamindb-airflow's `RemoteLaminDBStepMixin`
-and its helpers run unchanged as a `@task.lamindb_pixi` step:
+in front of `PixiDecoratedOperator` instead. The one change is where it adds packages: a virtualenv
+operator's `requirements` list becomes a call to `add_pypi_dependencies`. For example, lamindb-airflow's
+`RemoteLaminDBStepMixin` runs as a `@task.lamindb_pixi` step:
 
 ```python
 from contextlib import contextmanager
@@ -152,13 +156,30 @@ class LaminDBPixiDecoratedOperator(RemoteLaminDBStepMixin, PixiDecoratedOperator
             yield
 ```
 
+Its helper `ensure_lamindb_requirement` reads the listed packages from `operator.requirements` and assigns
+the list back. For a Pixi operator, it reads their names from
+[`pypi_dependencies_table`][airflow.providers.pixi.utils.manifest.pypi_dependencies_table], which takes
+either form of `pypi_dependencies`, and passes what it adds to `add_pypi_dependencies`:
+
+```diff
+ def ensure_lamindb_requirement(operator, remote, lamindb_version):
+-    requirements = list(operator.requirements)
++    listed = list(pypi_dependencies_table(operator.pypi_dependencies))
++    requirements = list(listed)
+     if not lamindb_requirement_lines(requirements):
+         lamindb_version = lamindb_version or remote.instance_lamindb_version()
+     add_lamindb_requirement(requirements, lamindb_version)
+-    operator.requirements = requirements
++    operator.add_pypi_dependencies(*requirements[len(listed):])
+```
+
 Differences to keep in mind:
 
-- `requirements` only extend inline manifests. With `pixi_project_path` or `pixi_toml_path`, the
-  packages must be in that environment; check `inline_manifest` before adding them.
+- `add_pypi_dependencies` only extends inline manifests. With `pixi_project_path` or `pixi_toml_path`,
+  the packages must be in that environment; check `inline_manifest` before adding them.
 - There is no `python_version`, `system_site_packages`, `index_urls` or `expect_airflow`. The Python
-  version is a `dependencies` entry, indexes go into `pypi_options`, and the environment never
-  contains Airflow unless the manifest lists it.
+  version is a `dependencies` entry, indexes go into `[pypi-options]` of a project's `pixi.toml`,
+  and the environment never contains Airflow unless the manifest lists it.
 
 ## Depending on this provider
 

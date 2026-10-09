@@ -10,7 +10,7 @@ from airflow.sdk import DAG, task
 
 with DAG("pixi_kubernetes_showcase", schedule=None, tags=["pixi", "kubernetes"]):
 
-    @task.pixi_kubernetes(in_cluster=False, namespace="default", requirements=["numpy"])
+    @task.pixi_kubernetes(in_cluster=False, namespace="default", pypi_dependencies=["numpy"])
     def numpy_in_a_pod() -> dict:
         import platform
 

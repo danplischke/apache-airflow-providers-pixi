@@ -43,6 +43,9 @@ jobs:
       - name: Run ruff format check
         run: uv run ruff format src tests dev --check
 
+      - name: Type check the runtime
+        run: uv run mypy
+
   test:
     name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

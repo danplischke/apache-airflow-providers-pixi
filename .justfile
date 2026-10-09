@@ -23,6 +23,7 @@ format:
 lint:
     uv run ruff check {{ src }}
     uv run ruff format {{ src }} --check
+    uv run mypy
 
 [group('development')]
 chore: format lint
@@ -203,18 +204,6 @@ airflow *args:
 [group('airflow')]
 airflow-reset:
     rm -rf .airflow
-
-# Vendor pixi's manifest schema for MIN_PIXI_VERSION in utils/pixi.py; run it after bumping that version
-[group('maintenance')]
-pixi-schema:
-    #!/usr/bin/env sh
-    set -eu
-    ver=$(sed -n 's/^MIN_PIXI_VERSION = Version("\(.*\)")$/\1/p' src/airflow/providers/pixi/utils/pixi.py)
-    [ -n "$ver" ] || { echo "no MIN_PIXI_VERSION in src/airflow/providers/pixi/utils/pixi.py"; exit 1; }
-    schema=src/airflow/providers/pixi/utils/pixi_manifest.schema.json
-    curl -fsSL "https://pixi.sh/v$ver/schema/manifest/schema.json" -o "$schema.tmp"
-    mv "$schema.tmp" "$schema"
-    echo "vendored the manifest schema of pixi $ver; check the diff and run just test"
 
 [group('maintenance')]
 clean:

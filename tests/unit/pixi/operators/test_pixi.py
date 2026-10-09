@@ -8,6 +8,7 @@ import inspect
 import json
 import os
 import pickle
+import re
 import signal
 import subprocess
 import sys
@@ -22,14 +23,13 @@ from airflow.sdk.execution_time.timeout import timeout
 
 from airflow.providers.pixi.exceptions import PixiCallableError
 from airflow.providers.pixi.operators.pixi import PixiOperator, _terminate
+from airflow.providers.pixi.runtime.runner import ERROR_SUFFIX
 from airflow.providers.pixi.utils.compat import AirflowException, AirflowSkipException, AirflowTaskTimeout
 from airflow.providers.pixi.utils.manifest import build_pixi_toml as _build_pixi_toml
-from airflow.providers.pixi.utils.manifest import (
-    pypi_dependencies_from_requirements as _pypi_dependencies_from_requirements,
-)
+from airflow.providers.pixi.utils.manifest import pypi_dependencies_table as _pypi_dependencies_table
 from airflow.providers.pixi.utils.pixi import MIN_PIXI_VERSION, local_platform
 from airflow.providers.pixi.utils.pixi import resolve_pixi as _resolve_pixi
-from airflow.providers.pixi.utils.source import ERROR_SUFFIX, RUNNER_SCRIPT
+from airflow.providers.pixi.utils.source import RUNNER_SCRIPT
 from airflow.providers.pixi.utils.source import function_source as _function_source
 
 if sys.version_info >= (3, 11):
@@ -232,8 +232,14 @@ def test_pixi_failing_before_the_callable_runs_reports_its_exit_code_and_output(
     assert not isinstance(excinfo.value, PixiCallableError)
 
 
-def test_runner_writes_the_error_file_the_operator_reads() -> None:
-    assert f'output_path + "{ERROR_SUFFIX}"' in RUNNER_SCRIPT
+def test_runner_writes_the_error_file_the_operator_reads(tmp_path: Path) -> None:
+    spec = tmp_path / "input"
+    output = tmp_path / "output"
+    spec.write_text(json.dumps({"module": "operator", "name": "truediv", "args": [1, 0], "kwargs": {}}))
+    proc = subprocess.run([sys.executable, "-c", RUNNER_SCRIPT, "json", str(spec), str(output)], check=False)
+    assert proc.returncode == 1
+    assert not output.exists()
+    assert json.loads(Path(f"{output}{ERROR_SUFFIX}").read_text())["type"] == "ZeroDivisionError"
 
 
 def leave_with(code):
@@ -338,9 +344,29 @@ def test_toml_path_is_passed_as_the_file(fake_pixi, tmp_path: Path) -> None:
     assert os.path.realpath(call["cwd"]) == os.path.realpath(tmp_path)
 
 
-def test_environment_is_passed(fake_pixi) -> None:
-    run(make(fake_pixi, python_callable="json:dumps", op_args=[1], environment="cuda"))
+def test_environment_is_passed(fake_pixi, tmp_path: Path) -> None:
+    run(make(fake_pixi, pixi_project_path=str(tmp_path), python_callable="json:dumps", op_args=[1], environment="cuda"))
     assert fake_pixi.calls[-1]["argv"][3:5] == ["--environment", "cuda"]
+
+
+def test_environment_is_rejected_for_an_inline_manifest() -> None:
+    with pytest.raises(ValueError, match="an inline manifest has only the default environment.*pixi.toml"):
+        PixiOperator(task_id="t", python_callable=add, environment="cuda", **INLINE)
+
+
+def test_templated_environment_of_an_inline_manifest_fails_before_running_pixi(fake_pixi) -> None:
+    op = make(fake_pixi, python_callable=add, op_args=[1], environment="{{ params.env }}")
+    op.render_template_fields({"params": {"env": "cuda"}})
+    with pytest.raises(AirflowException, match="environment='cuda' needs a manifest that defines it"):
+        run(op)
+    assert fake_pixi.calls == []
+
+
+def test_templated_environment_of_an_inline_manifest_may_render_empty(fake_pixi) -> None:
+    op = make(fake_pixi, python_callable="json:dumps", op_args=[1], environment="{{ params.env }}")
+    op.render_template_fields({"params": {"env": ""}})
+    assert run(op) == "1"
+    assert fake_pixi.calls[-1]["argv"][3] == "python"
 
 
 def test_cache_dir_variables_are_set_in_the_environment(fake_pixi, monkeypatch) -> None:
@@ -493,6 +519,10 @@ def test_stopping_a_group_that_already_exited_still_reaps_pixi(error: type[OSErr
     assert proc.wait.call_args_list[-1] == ((), {})
 
 
+def parse_toml(text: str) -> dict:
+    return tomllib.loads(text)
+
+
 def test_build_pixi_toml_minimal() -> None:
     toml = _build_pixi_toml(
         channels=["conda-forge"],
@@ -519,51 +549,84 @@ def test_build_pixi_toml_with_pypi() -> None:
     assert parse_toml(toml)["pypi-dependencies"] == {"pandas": ">=2.0"}
 
 
-def test_build_pixi_toml_with_environments() -> None:
+def test_build_pixi_toml_writes_matchspecs_and_tables_as_pixi_reads_them() -> None:
     toml = _build_pixi_toml(
         channels=["conda-forge"],
         platforms=["linux-64"],
-        environments={"test": ["test"], "cuda": ["cuda"]},
-    )
-    assert parse_toml(toml)["environments"] == {"test": ["test"], "cuda": ["cuda"]}
-
-
-def parse_toml(text: str) -> dict:
-    return tomllib.loads(text)
-
-
-def test_build_pixi_toml_writes_valid_toml_for_tables_and_quotes() -> None:
-    toml = _build_pixi_toml(
-        channels=["conda-forge"],
-        platforms=["linux-64"],
-        workspace_name='my "project"',
-        dependencies=["python 3.12.*", "numpy>=2", "conda-forge::scipy"],
+        dependencies=["python 3.12.*", "numpy>=2", "conda-forge::scipy", "ruamel.yaml"],
         pypi_dependencies={"torch": {"version": ">=2", "extras": ["cuda"]}, "pandas": ">=2.0"},
-        pypi_options={"index-url": "https://pypi.example/simple"},
-        feature={"gpu": {"platforms": ["linux-64"], "dependencies": {"cuda": "12.*"}}},
-        environments={"gpu": {"features": ["gpu"], "solve-group": "default"}},
     )
     manifest = parse_toml(toml)
-    assert manifest["workspace"]["name"] == 'my "project"'
     assert manifest["dependencies"] == {
         "python": "3.12.*",
         "numpy": ">=2",
         "scipy": {"version": "*", "channel": "conda-forge"},
+        "ruamel.yaml": "*",
     }
     assert manifest["pypi-dependencies"]["torch"] == {"version": ">=2", "extras": ["cuda"]}
-    assert manifest["pypi-options"]["index-url"] == "https://pypi.example/simple"
-    assert manifest["feature"]["gpu"]["dependencies"] == {"cuda": "12.*"}
-    assert manifest["environments"]["gpu"] == {"features": ["gpu"], "solve-group": "default"}
 
 
-def test_requirements_become_pypi_dependencies() -> None:
+def test_inline_manifest_of_a_typical_task_is_what_pixi_reads(fake_pixi) -> None:
+    op = make(
+        fake_pixi,
+        dependencies=["python 3.12.*", "numpy>=2"],
+        pypi_dependencies=["pandas>=2", "requests[socks]==2.32"],
+        channels=["conda-forge", "bioconda"],
+        python_callable="json:dumps",
+        op_args=[1],
+        cleanup_temp_manifest=False,
+    )
+    assert run(op) == "1"
+    manifest = Path(fake_pixi.calls[-1]["argv"][2])
+    assert manifest.name == "pixi.toml"
+    assert parse_toml(manifest.read_text()) == {
+        "workspace": {"channels": ["conda-forge", "bioconda"], "platforms": [local_platform()]},
+        "dependencies": {"python": "3.12.*", "numpy": ">=2"},
+        "pypi-dependencies": {"pandas": ">=2", "requests": {"version": "==2.32", "extras": ["socks"]}},
+    }
+
+
+@pytest.mark.parametrize(
+    "dependencies",
+    [["numpy>=2", "::"], ['numpy[version=">=2"]'], ["pkg::"], ["numpy 1.* py* extra"], ["https://x.example/c::numpy"]],
+)
+def test_an_invalid_matchspec_is_rejected_when_the_dag_is_parsed(dependencies) -> None:
+    with pytest.raises(ValueError, match="invalid conda MatchSpec"):
+        PixiOperator(task_id="t", python_callable=add, dependencies=dependencies)
+
+
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        ("pytorch 2.0 cuda*", {"version": "2.0", "build": "cuda*"}),
+        ("conda-forge::pytorch * cuda*", {"version": "*", "build": "cuda*", "channel": "conda-forge"}),
+        ("numpy >= 1.26, < 2", ">=1.26,<2"),
+    ],
+)
+def test_a_matchspec_with_a_build_or_spaces_becomes_its_manifest_entry(spec, expected) -> None:
+    toml = _build_pixi_toml(channels=["conda-forge"], platforms=["linux-64"], dependencies=[spec])
+    assert next(iter(parse_toml(toml)["dependencies"].values())) == expected
+
+
+def test_dependencies_as_a_string_are_rejected_when_the_dag_is_parsed() -> None:
+    with pytest.raises(TypeError, match=r"such as \['numpy'\], not a string"):
+        PixiOperator(task_id="t", python_callable=add, dependencies="numpy")
+
+
+@pytest.mark.parametrize("dependencies", [["numpy>=2", "conda-forge::numpy<1.27"], ["NumPy", "numpy"]])
+def test_a_package_listed_twice_in_dependencies_is_rejected(dependencies) -> None:
+    with pytest.raises(ValueError, match="listed twice in dependencies"):
+        PixiOperator(task_id="t", python_callable=add, dependencies=dependencies)
+
+
+def test_pip_requirement_strings_become_pypi_dependencies() -> None:
     requirements_file = """
         # comment
         requests>=2.31  # trailing comment
 
         black[jupyter]==24.1
     """
-    assert _pypi_dependencies_from_requirements(
+    assert _pypi_dependencies_table(
         [
             "pandas",
             requirements_file,
@@ -581,45 +644,124 @@ def test_requirements_become_pypi_dependencies() -> None:
     }
 
 
+def test_a_requirements_file_in_one_string_becomes_pypi_dependencies() -> None:
+    assert _pypi_dependencies_table("# pinned\npandas>=2  # data\n\nrequests\n") == {"pandas": ">=2", "requests": "*"}
+
+
+def test_the_dict_form_of_pypi_dependencies_is_written_as_given(fake_pixi) -> None:
+    pypi = {"pandas": ">=2", "torch": {"version": ">=2", "extras": ["cuda"]}}
+    op = make(fake_pixi, pypi_dependencies=pypi)
+    assert parse_toml(op.inline_manifest_toml())["pypi-dependencies"] == pypi
+
+
 @pytest.mark.parametrize(
-    ("requirements", "error"),
+    ("pypi_dependencies", "error"),
     [
         (["-r other.txt"], "pip options"),
+        ("pandas\n--index-url https://pypi.example/simple", r"under \[pypi-options\] in a pixi.toml"),
         (['pandas; python_version < "3.11"'], "environment markers"),
-        (["pandas", "Pandas>=2"], "listed twice"),
+        (["pandas", "Pandas>=2"], "listed twice in pypi_dependencies"),
+        ("pandas\nPandas>=2", "listed twice in pypi_dependencies"),
         (["not a requirement!"], "invalid requirement"),
     ],
 )
-def test_unsupported_requirements_are_rejected_when_the_dag_is_parsed(requirements, error) -> None:
+def test_unsupported_pip_requirements_are_rejected_when_the_dag_is_parsed(pypi_dependencies, error) -> None:
     with pytest.raises(ValueError, match=error):
-        PixiOperator(task_id="t", python_callable=add, requirements=requirements)
+        PixiOperator(task_id="t", python_callable=add, pypi_dependencies=pypi_dependencies)
 
 
-def test_requirements_alone_make_an_inline_manifest_with_the_workers_python(fake_pixi) -> None:
+def test_templated_pip_requirements_are_checked_once_rendered(fake_pixi) -> None:
+    op = make(fake_pixi, pypi_dependencies=["{{ params.package }}", "--index-url x"], dependencies=None)
+    op.render_template_fields({"params": {"package": "pandas"}})
+    with pytest.raises(ValueError, match="pip options"):
+        op.inline_manifest_toml()
+
+
+def test_pypi_dependencies_alone_make_an_inline_manifest_with_the_workers_python(fake_pixi) -> None:
     run(
-        make(fake_pixi, dependencies=None, requirements="pandas>=2\nrequests", op_args=[1], cleanup_temp_manifest=False)
+        make(
+            fake_pixi,
+            dependencies=None,
+            pypi_dependencies="pandas>=2\nrequests",
+            op_args=[1],
+            cleanup_temp_manifest=False,
+        )
     )
     manifest = parse_toml(Path(fake_pixi.calls[-1]["argv"][2]).read_text())
     assert manifest["dependencies"] == {"python": f"{sys.version_info.major}.{sys.version_info.minor}.*"}
     assert manifest["pypi-dependencies"] == {"pandas": ">=2", "requests": "*"}
 
 
-def test_requirements_are_templated(fake_pixi) -> None:
-    op = make(fake_pixi, requirements=["{{ params.package }}"], dependencies=None)
-    assert "requirements" in op.template_fields
-    op.render_template_fields({"params": {"package": "pandas==2.2"}})
-    assert parse_toml(op.inline_manifest_toml())["pypi-dependencies"] == {"pandas": "==2.2"}
+@pytest.mark.parametrize(
+    "pypi_dependencies",
+    [
+        ["{{ params.package }}=={{ params.version }}"],
+        "{{ params.package }}=={{ params.version }}",
+        {"pandas": "=={{ params.version }}"},
+        {"pandas": {"version": "=={{ params.version }}"}},
+    ],
+)
+def test_pypi_dependencies_are_templated(fake_pixi, pypi_dependencies) -> None:
+    op = make(fake_pixi, pypi_dependencies=pypi_dependencies, dependencies=None)
+    assert "pypi_dependencies" in op.template_fields
+    op.render_template_fields({"params": {"package": "pandas", "version": "2.2"}})
+    pypi = parse_toml(op.inline_manifest_toml())["pypi-dependencies"]
+    assert pypi in ({"pandas": "==2.2"}, {"pandas": {"version": "==2.2"}})
 
 
-def test_requirements_and_pypi_dependencies_must_not_overlap(fake_pixi) -> None:
-    op = make(fake_pixi, pypi_dependencies={"Pandas": "*"}, requirements=["pandas"])
-    with pytest.raises(ValueError, match="both pypi_dependencies and requirements"):
-        run(op)
-
-
-def test_requirements_cannot_extend_a_project(tmp_path: Path) -> None:
+def test_pypi_dependencies_cannot_extend_a_project(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Exactly one of"):
-        PixiOperator(task_id="t", python_callable=add, pixi_project_path=str(tmp_path), requirements=["pandas"])
+        PixiOperator(task_id="t", python_callable=add, pixi_project_path=str(tmp_path), pypi_dependencies=["pandas"])
+
+
+@pytest.mark.parametrize(
+    ("pypi_dependencies", "expected"),
+    [
+        (None, ["tracker>=1"]),
+        ("pandas\nrequests", ["pandas\nrequests", "tracker>=1"]),
+        (["pandas"], ["pandas", "tracker>=1"]),
+        ({"pandas": "*"}, {"pandas": "*", "tracker": ">=1"}),
+    ],
+)
+def test_add_pypi_dependencies_keeps_the_form_the_dag_used(fake_pixi, pypi_dependencies, expected) -> None:
+    op = make(fake_pixi, pypi_dependencies=pypi_dependencies)
+    given = op.pypi_dependencies
+    op.add_pypi_dependencies("tracker>=1")
+    assert op.pypi_dependencies == expected
+    assert given == pypi_dependencies
+    pypi = parse_toml(op.inline_manifest_toml())["pypi-dependencies"]
+    assert pypi["tracker"] == ">=1"
+
+
+@pytest.mark.parametrize("pypi_dependencies", [{"Tracker": "*"}, ["tracker"]])
+def test_add_pypi_dependencies_rejects_a_package_listed_already(fake_pixi, pypi_dependencies) -> None:
+    op = make(fake_pixi, pypi_dependencies=pypi_dependencies)
+    with pytest.raises(ValueError, match="tracker is listed twice in pypi_dependencies"):
+        op.add_pypi_dependencies("tracker>=1")
+    assert op.pypi_dependencies == pypi_dependencies
+
+
+def test_add_pypi_dependencies_rejects_pip_options(fake_pixi) -> None:
+    op = make(fake_pixi, pypi_dependencies={"pandas": "*"})
+    with pytest.raises(ValueError, match="pip options"):
+        op.add_pypi_dependencies("--extra-index-url https://pypi.example/simple")
+
+
+@pytest.mark.parametrize("source", ["pixi_project_path", "pixi_toml_path"])
+def test_add_pypi_dependencies_cannot_extend_a_project_or_manifest_file(fake_pixi, tmp_path: Path, source) -> None:
+    path = str(tmp_path if source == "pixi_project_path" else tmp_path / "pixi.toml")
+    op = make(fake_pixi, **{source: path})
+    with pytest.raises(AirflowException, match=f"can only extend an inline manifest.*{re.escape(path)}"):
+        op.add_pypi_dependencies("tracker")
+    assert op.pypi_dependencies is None
+
+
+def test_pypi_dependencies_set_on_a_project_fail_the_run(fake_pixi, tmp_path: Path) -> None:
+    op = make(fake_pixi, pixi_project_path=str(tmp_path))
+    op.pypi_dependencies = ["pandas"]
+    with pytest.raises(AirflowException, match="can only extend an inline manifest"):
+        run(op)
+    assert fake_pixi.calls == []
 
 
 def test_env_vars_reach_the_run_and_override_the_workers(fake_pixi, monkeypatch) -> None:
@@ -903,13 +1045,13 @@ def test_an_exception_in_an_async_function_names_it(fake_pixi) -> None:
         run(make(fake_pixi, python_callable=fails_later))
 
 
-def test_the_runner_awaits_without_asyncio_run(tmp_path: Path) -> None:
+def test_the_runner_awaits_an_awaitable_that_is_not_a_coroutine(tmp_path: Path) -> None:
+    source = "class Later:\n    def __await__(self):\n        yield\n        return 'later'\n\n\ndef later():\n    return Later()\n"
     spec = tmp_path / "input"
     output = tmp_path / "output"
-    spec.write_text(json.dumps({"module": "asyncio", "name": "sleep", "args": [0, "slept"], "kwargs": {}}))
-    script = "import asyncio\ndel asyncio.run\n" + RUNNER_SCRIPT
-    subprocess.run([sys.executable, "-c", script, "json", str(spec), str(output)], check=True)
-    assert json.loads(output.read_text()) == "slept"
+    spec.write_text(json.dumps({"source": source, "filename": "<test>", "name": "later", "args": [], "kwargs": {}}))
+    subprocess.run([sys.executable, "-c", RUNNER_SCRIPT, "json", str(spec), str(output)], check=True)
+    assert json.loads(output.read_text()) == "later"
 
 
 def returns_a_dict_with_attributes():

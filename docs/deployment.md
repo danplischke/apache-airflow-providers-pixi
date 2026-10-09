@@ -120,7 +120,8 @@ detached-environments = "/cache/pixi-detached"
 ## Private channels and indexes
 
 Store the credentials of private conda channels and PyPI indexes as connections of type `pixi`, and
-pass their ids as `pixi_conn_id`:
+pass their ids as `pixi_conn_id`. A PyPI index itself is named, without credentials, in the
+`[pypi-options]` table of the project's `pixi.toml`; inline manifests take no index options.
 
 ```python
 with DAG("pipeline", default_args={"pixi_conn_id": ["prefix_dev", "private_pypi"]}): ...

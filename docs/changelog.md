@@ -10,7 +10,6 @@ Initial version of the provider.
   `apache-airflow-providers-standard>=1.9.1` and, with the `cncf.kubernetes` extra,
   `apache-airflow-providers-cncf-kubernetes>=10.9.0`, are the versions pinned by Airflow 3.1.2's
   constraints file, so every supported Airflow release can be installed with its own constraints file.
-- `jsonschema>=4.19.1`, the floor of `apache-airflow-core`, for checking inline manifests.
 - Pixi 0.81.0 or newer on the workers (`MIN_PIXI_VERSION`), checked before the first run with a
   binary. The provider never installs pixi.
 
@@ -29,6 +28,8 @@ Initial version of the provider.
   in a Kubernetes pod, with the `cncf.kubernetes` extra.
 - Runs on the worker leave out the worker's `PYTHONPATH`, `PYTHONHOME`, `PYTHONUSERBASE` and `VIRTUAL_ENV`
   and set `PYTHONNOUSERSITE=1`, so the environment's Python never imports the worker's packages.
+- The code that runs inside the Pixi environment is a regular, type-checked module,
+  `airflow.providers.pixi.runtime.runner`, shipped as source; the environment needs Python 3.10 or newer.
 - Callables may be coroutine functions (`async def`); the environment awaits them, on every operator,
   sensor and pod.
 - `PixiSensor` and `@task.pixi_sensor`: a sensor whose callable runs in a Pixi environment on each poke.
@@ -40,7 +41,13 @@ Initial version of the provider.
 
 ### Environments
 
-- `environment` is templated, so the environment can be chosen per run.
+- An inline manifest is a list of packages: `dependencies` (a dict or a list of conda MatchSpecs),
+  `pypi_dependencies`, `channels` and `platforms`. PyPI indexes, features, several
+  environments and other `pixi.toml` settings come from a project or manifest file. A MatchSpec is
+  `[channel::]name [version [build]]`; another form, a package listed twice or a string in place of the
+  list is rejected when the DAG is parsed.
+- `environment` is templated, so the environment can be chosen per run. Inline manifests have only the
+  default environment and reject it.
 - `lock_mode="locked"` or `"frozen"` passes `--locked` or `--frozen` to `pixi run`, so a project's
   `pixi.lock` is used as it is instead of being re-solved and rewritten. Without it, plain `pixi run`
   updates `pixi.lock` when the manifest changed. Inline manifests have no lock file and reject it.
@@ -51,14 +58,12 @@ Initial version of the provider.
 - Relative `pixi_project_path`, `pixi_toml_path` and `env_cache_path` are resolved against the
   directory of the DAG file, after templates are rendered, so a project can live next to the DAG in a
   DAG bundle. In a pod, a relative path is relative to the image's working directory instead.
-- `requirements`: pip requirement strings added to an inline manifest's `[pypi-dependencies]`; an
-  inline manifest with PyPI packages but no `python` gets the worker's Python version.
+- `pypi_dependencies` (templated) takes the dict of `[pypi-dependencies]`, or pip requirement strings as
+  for `@task.virtualenv`: a list, or one string that may hold several lines, such as a rendered
+  requirements file. Pip options, environment markers and a package listed twice are rejected, when the
+  DAG is parsed if nothing in it is templated. An inline manifest with PyPI packages but no `python`
+  gets the worker's Python version.
 - Reuse of inline environments across runs with `env_cache_path`.
-- Inline manifests are checked against pixi's manifest schema for `MIN_PIXI_VERSION`, when the DAG is
-  parsed and again when the task runs. A typo or a wrong shape raises `ValueError` that names the TOML
-  key, such as `environments.gpu`, and leaves out the value, which can hold a password.
-  `validate_manifest=False` turns the check off for keys only a newer pixi on the workers knows.
-- `feature` tables take every key of a pixi feature, such as `system-requirements`, as pixi spells it.
 
 ### Calling the function
 
@@ -112,8 +117,9 @@ Initial version of the provider.
 ### Extending
 
 - Other providers can build operators and task decorators on `PixiOperator` and `@task.pixi`, with
-  the extension points of `@task.virtualenv`: `get_python_source()`, `op_kwargs`, `env_vars` and
-  `requirements`, plus `inline_manifest`. The decorator line of a decorator built on `@task.pixi`
+  the extension points of `@task.virtualenv`: `get_python_source()`, `op_kwargs` and `env_vars`, plus
+  `add_pypi_dependencies()`, which adds pip requirement strings to an inline manifest whichever form
+  `pypi_dependencies` has, and `inline_manifest`. The decorator line of a decorator built on `@task.pixi`
   (its `custom_operator_name`) is removed from the shipped source.
 - `BasePixiOperator.pixi_run_options()` and `default_platforms()`, and `PixiRunEnvMixin`, which
   resolves the environment variables and credentials of a run for operators that start pixi

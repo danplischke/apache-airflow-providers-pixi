@@ -110,7 +110,7 @@ sensor checks inside [Pixi](https://pixi.sh) environments, on the worker or in a
 it needs Apache Airflow 3.1.2 or newer, and the workers need pixi 0.81.0 or newer, which the provider
 never installs itself. An environment is a
 Pixi project (`pixi_project_path`), a manifest file (`pixi_toml_path`), or an inline manifest
-(`dependencies`, `pypi_dependencies`, `requirements`). Functions are shipped as source, so they must
+(`dependencies`, `pypi_dependencies`). Functions are shipped as source, so they must
 be self-contained: imports inside the function, no variables from enclosing functions.
 """
 
