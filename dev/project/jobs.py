@@ -15,6 +15,13 @@ def summarize(values):
     }
 
 
+def fit_normal(values):
+    from scipy import stats
+
+    mean, std = stats.norm.fit(values)
+    return {"mean": float(mean), "std": float(std), "shapiro_p": float(stats.shapiro(values).pvalue)}
+
+
 if __name__ == "__main__":
     values = [float(value) for value in sys.argv[1:]]
     print(f"{len(values)} values, mean {statistics.fmean(values):.3f}")

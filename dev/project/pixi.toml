@@ -1,16 +1,33 @@
 [workspace]
 name = "pixi-airflow-showcase"
+description = "Project the dev/dags showcase DAGs run in"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
 
+[tasks]
+describe = { cmd = "python jobs.py", description = "Print count and mean of the numbers passed as arguments" }
+
 [dependencies]
+scipy = ">=1.14"
+
+[pypi-dependencies]
+httpx = ">=0.28"
+
+[feature.py312.dependencies]
 python = "3.12.*"
 
-[tasks]
-describe = "python jobs.py"
+[feature.py313.dependencies]
+python = "3.13.*"
 
 [feature.lint.dependencies]
 ruff = "*"
 
+[feature.lint.tasks]
+lint = { cmd = "ruff check .", description = "Lint the project" }
+fmt = { cmd = "ruff format .", description = "Format the project" }
+
+# python constraints from features intersect, so each environment picks exactly one version
 [environments]
-lint = ["lint"]
+default = ["py312"]
+lint = ["py312", "lint"]
+py313 = ["py313"]

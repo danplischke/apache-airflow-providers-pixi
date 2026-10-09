@@ -21,7 +21,7 @@ MARKER = "/tmp/pixi-showcase-{{ run_id | replace(':', '-') | replace('+', '-') }
 with DAG(
     "pixi_showcase",
     schedule=None,
-    params={"env": Param("default", enum=["default", "lint"], description="environment of dev/project")},
+    params={"env": Param("default", enum=["default", "lint", "py313"], description="environment of dev/project")},
     tags=["pixi"],
 ):
 
@@ -34,6 +34,13 @@ with DAG(
         return np.random.default_rng(zlib.crc32(run_id.encode())).random(count).round(3).tolist()
 
     values = random_values(5)
+
+    PixiOperator(
+        task_id="fit_normal",
+        pixi_project_path=PROJECT,
+        python_callable="jobs:fit_normal",
+        op_args=[values],
+    )
 
     stats = PixiOperator(
         task_id="summarize",
@@ -48,7 +55,8 @@ with DAG(
         pixi_project_path=PROJECT,
         environment="{{ params.env }}",
         lock_mode="locked",
-        bash_command="python --version && (ruff --version || echo 'no ruff in this environment')",
+        bash_command='python --version && python -c \'import httpx, scipy; print("scipy", scipy.__version__, "httpx", httpx.__version__)\''
+        " && (ruff --version || echo 'no ruff in this environment')",
     )
 
     @task.pixi_bash(pixi_project_path=PROJECT)
