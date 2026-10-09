@@ -6,16 +6,28 @@ from typing import Any
 
 __version__ = "0.1.0"
 
-# Lazy: Airflow imports this package for get_provider_info while its own configuration is still
-# initialising, so importing operators here is circular. PixiKubernetesPodOperator needs the
-# cncf.kubernetes extra, so it is imported from airflow.providers.pixi.operators.kubernetes only.
 _EXPORTS = {
     "PixiBashOperator": "airflow.providers.pixi.operators.bash",
+    "PixiBranchOperator": "airflow.providers.pixi.operators.pixi",
+    "PixiCallableError": "airflow.providers.pixi.exceptions",
+    "PixiHook": "airflow.providers.pixi.hooks.pixi",
     "PixiOperator": "airflow.providers.pixi.operators.pixi",
     "PixiSensor": "airflow.providers.pixi.sensors.pixi",
+    "PixiShortCircuitOperator": "airflow.providers.pixi.operators.pixi",
+    "PixiTaskOperator": "airflow.providers.pixi.operators.task",
 }
 
-__all__ = ["PixiBashOperator", "PixiOperator", "PixiSensor", "__version__"]
+__all__ = [
+    "PixiBashOperator",
+    "PixiBranchOperator",
+    "PixiCallableError",
+    "PixiHook",
+    "PixiOperator",
+    "PixiSensor",
+    "PixiShortCircuitOperator",
+    "PixiTaskOperator",
+    "__version__",
+]
 
 
 def __getattr__(name: str) -> Any:

@@ -12,8 +12,10 @@ The decorator is registered on Airflow's `task` object once the provider is inst
     Defaults to `False`.
 
 The environment is chosen the same way as for the operator: exactly one of `pixi_project_path`,
-`pixi_toml_path`, or an inline manifest (`dependencies` / `pypi_dependencies`). See
-[Choosing the environment](../operators/pixi.md#choosing-the-environment).
+`pixi_toml_path`, or an inline manifest (`dependencies` / `pypi_dependencies` / `requirements`). See
+[Choosing the environment](../operators/pixi.md#choosing-the-environment). A relative project path is
+relative to the DAG file, and `lock_mode="locked"` installs a project from its `pixi.lock` without
+updating it.
 
 ## Usage example
 
@@ -55,6 +57,27 @@ Like `@task.virtualenv`, the function's source is shipped to the environment and
   parsed; pass the value as an argument instead.
 - **Arguments and the return value are serialized**, as JSON by default or with
   `serializer="pickle"`. See [Arguments and return values](../operators/pixi.md#arguments-and-return-values).
+- **Context values arrive as parameters**, as for `@task.virtualenv`: `ds`, `params`, `run_id`,
+  `logical_date` and the other keys listed in [Airflow context](../operators/pixi.md#airflow-context),
+  as JSON values. Dates are ISO 8601 strings. Give these parameters a default, as for any TaskFlow
+  function:
+
+    ```python
+    @task.pixi(requirements=["pandas", "pyarrow"])
+    def report(table: str, ds=None, params=None) -> int:
+        import pandas as pd
+
+        return len(pd.read_parquet(f"{params['root']}/{table}/{ds}.parquet"))
+    ```
+
+    `ti`, `dag_run` and other Airflow objects don't reach the environment, and
+    `get_current_context()` isn't available there.
+
+- **An exception fails the task with
+  [`PixiCallableError`][airflow.providers.pixi.exceptions.PixiCallableError]**, such as
+  `train raised ValueError: no rows`, after its traceback is printed to the task log. To skip the task
+  instead, exit with a code listed in `skip_on_exit_code`, for example `sys.exit(99)`. See
+  [Errors, skipping and timeouts](../operators/pixi.md#errors-skipping-and-timeouts).
 
 Task decorators such as `@task.pixi`, `@setup`, `@teardown`, `@task.skip_if` and `@task.run_if` are
 removed from the shipped source, and so is the decorator of a provider that builds on `@task.pixi`

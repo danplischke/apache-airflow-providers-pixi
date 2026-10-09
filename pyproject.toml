@@ -25,19 +25,16 @@ classifiers = [
 ]
 requires-python = ">=3.10,!=3.15"
 dependencies = [
-    "apache-airflow>=3.0",
-    # requirement strings are translated to pixi's [pypi-dependencies]
-    # BashOperator and PythonSensor, which the shell operator and the sensor build on
-    "apache-airflow-providers-standard",
+    "apache-airflow>=3.1.2",
+    "apache-airflow-providers-standard>=1.9.1",
+    "jsonschema>=4.19.1",
     "packaging>=22",
-    # writes inline pixi.toml manifests; tomllib in the standard library only reads TOML
     "tomlkit>=0.12",
 ]
 
 [project.optional-dependencies]
-# PixiKubernetesPodOperator and @task.pixi_kubernetes
 "cncf.kubernetes" = [
-    "apache-airflow-providers-cncf-kubernetes",
+    "apache-airflow-providers-cncf-kubernetes>=10.9.0",
 ]
 
 [dependency-groups]
@@ -50,9 +47,7 @@ dev = [
 ]
 docs = [
     "mkdocstrings-python>=2.0",
-    # formats long signatures in the API reference
     "ruff>=0.8",
-    # zensical needs Python 3.11+; build the docs with a newer Python than the oldest supported
     "zensical>=0.0.69; python_version >= '3.11'",
 ]
 

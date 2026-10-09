@@ -8,8 +8,6 @@ from typing import Any
 
 import pytest
 
-# Stands in for pixi: answers `--version`, or records the call, then runs the command after
-# `run --manifest-path M [--environment E]` as a child process, as pixi does, with this interpreter as `python`.
 FAKE_PIXI = """#!{python}
 import json, os, subprocess, sys
 
@@ -22,9 +20,15 @@ if args == ["--version"]:
 keys = ("PIXI_CACHE_DIR", "UV_CACHE_DIR", "PIP_CACHE_DIR", "PYTHONUNBUFFERED")
 with open({calls!r}, "a") as f:
     f.write(json.dumps({{"argv": args, "cwd": os.getcwd(), "env": {{k: os.environ.get(k) for k in keys}}}}) + "\\n")
+if os.environ.get("FAKE_PIXI_FAIL"):
+    print("Error: failed to solve the environment", file=sys.stderr)
+    sys.exit(int(os.environ["FAKE_PIXI_FAIL"]))
+if not os.path.exists(args[2]):
+    print("Error: could not find pixi.toml or pyproject.toml at " + args[2], file=sys.stderr)
+    sys.exit(1)
 args = args[1:]
-while args[0] in ("--manifest-path", "--environment"):
-    args = args[2:]
+while args[0] in ("--manifest-path", "--environment", "--locked", "--frozen"):
+    args = args[1:] if args[0] in ("--locked", "--frozen") else args[2:]
 if args[0] == "python":
     args[0] = sys.executable
 sys.exit(subprocess.call(args))
@@ -70,3 +74,18 @@ def make_fake_pixi(tmp_path: Path):
         return FakePixi(directory, version=version)
 
     return make
+
+
+@pytest.fixture
+def read_only_project(tmp_path: Path):
+    """A project directory that nothing can be written to, as one baked into an image or on a read-only volume."""
+    project = tmp_path / "read_only_project"
+    project.mkdir()
+    (project / "pixi.toml").touch()
+    (project / "run.sh").write_text("#!/bin/sh\necho from run.sh\n")
+    (project / "run.sh").chmod(0o755)
+    project.chmod(0o555)
+    try:
+        yield project
+    finally:
+        project.chmod(0o755)

@@ -1,0 +1,84 @@
+name: Kubernetes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - src/airflow/providers/pixi/operators/kubernetes.py
+      - src/airflow/providers/pixi/decorators/kubernetes.py
+      - src/airflow/providers/pixi/operators/pixi.py
+      - src/airflow/providers/pixi/utils/**
+      - src/airflow/providers/pixi/exceptions.py
+      - tests/system/pixi/example_pixi_kubernetes.py
+      - tests/system/pixi/test_example_kubernetes.py
+      - .github/workflows/kubernetes.yml
+      - pyproject.toml
+      - uv.lock
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION_DEFAULT: "3.14"
+
+jobs:
+  kind:
+    name: Pods in kind (Airflow dag.test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/tests/system/pixi
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      - name: Create kind cluster
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1 — https://github.com/helm/kind-action/releases/tag/v1.15.1
+        with:
+          cluster_name: pixi-airflow
+          wait: 120s
+
+      - name: Wait for the cluster
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=120s
+          timeout 120 sh -c 'until kubectl get serviceaccount default >/dev/null 2>&1; do sleep 2; done'
+          kubectl get nodes -o wide
+
+      - name: Init Airflow DB
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+        run: uv run --no-sync airflow db migrate
+
+      - name: Run the pods
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+          PIXI_K8S_E2E_TEST: "1"
+        run: |
+          export KUBECONFIG="$HOME/.kube/config"
+          uv run --no-sync pytest tests/system/pixi/test_example_kubernetes.py -v
+
+      - name: Show the cluster's pods and events
+        if: failure()
+        run: |
+          kubectl get pods --all-namespaces -o wide
+          kubectl get events --all-namespaces --sort-by=.lastTimestamp
+          kubectl describe pods --namespace default

@@ -7,6 +7,7 @@ on:
   # filtered-out PR would wait on them forever.
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -82,6 +83,64 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+  compat:
+    name: Airflow ${{ matrix.airflow-version }} (official constraints)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        airflow-version: ["3.1.8", "3.2.2", "3.3.2"]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install Airflow with its constraints
+        env:
+          AIRFLOW_VERSION: ${{ matrix.airflow-version }}
+        run: |
+          uv venv --python 3.12
+          uv pip install "apache-airflow==${AIRFLOW_VERSION}" apache-airflow-providers-standard \
+            apache-airflow-providers-cncf-kubernetes apache-airflow-providers-common-compat \
+            pytest pyyaml jsonschema tomlkit "packaging>=22" \
+            -c "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt"
+          uv pip install --no-deps -e .
+
+      - name: Check the requirements in pyproject.toml accept the constrained versions
+        run: uv pip check
+
+      - name: Run tests
+        run: .venv/bin/python -m pytest tests -v
+
+  lowest-direct:
+    name: Lowest direct dependencies (Python 3.10)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        with:
+          python-version: "3.10"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v8.3.2
+
+      - name: Install the lowest allowed versions
+        run: uv sync --resolution lowest-direct --group dev --python 3.10
+
+      - name: Show the installed versions
+        run: uv pip list
+
+      - name: Run unit tests
+        run: uv run --no-sync pytest tests/unit -v
+
   smoke-test:
     name: Smoke Test (base install)
     runs-on: ubuntu-latest
@@ -102,10 +161,7 @@ jobs:
         run: uv sync --locked --no-default-groups
 
       - name: Smoke import
-        run: |
-          uv run --no-sync python -c "import airflow.providers.pixi; print('import OK')"
-          uv run --no-sync python -c "from airflow.providers.pixi.get_provider_info import get_provider_info; get_provider_info(); print('provider info OK')"
-          uv run --no-sync python -c "from airflow.sdk import task; assert hasattr(task, 'pixi'); print('@task.pixi registered')"
+        run: uv run --no-sync python dev/smoke.py
 
   integration-test:
     name: Integration Test (pixi ${{ matrix.pixi-version }})
@@ -113,7 +169,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # the minimum the provider accepts (MIN_PIXI_VERSION), and the newest release
         pixi-version: [v0.81.0, latest]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
@@ -161,7 +216,6 @@ jobs:
 
       - name: Install pixi
         env:
-          # MIN_PIXI_VERSION; tests/unit/pixi/operators/test_pixi.py keeps the two in sync
           PIXI_VERSION: v0.81.0
           PIXI_NO_PATH_UPDATE: "1"
         run: |

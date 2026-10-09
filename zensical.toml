@@ -1,5 +1,3 @@
-# Documentation site, built with Zensical (https://zensical.org) and deployed to GitHub Pages by
-# .github/workflows/docs.yml. Preview locally with: uv run --group docs zensical serve
 [project]
 site_name = "apache-airflow-providers-pixi"
 site_description = "Apache Airflow 3 provider to run Python callables in Pixi environments."
@@ -14,7 +12,6 @@ Apache Airflow, Apache, Airflow and the Airflow logo are trademarks of The Apach
 This project is not affiliated with or endorsed by The Apache Software Foundation.
 """
 
-# Same sections as the provider docs on airflow.apache.org
 nav = [
   { "Basics" = [
     { "Home" = "index.md" },
@@ -22,11 +19,17 @@ nav = [
     { "Security" = "security.md" },
   ] },
   { "Guides" = [
+    { "Connection types" = [
+      { "Pixi Connection" = "connections/pixi.md" },
+    ] },
     { "Pixi Operator" = "operators/pixi.md" },
     { "Pixi Task Decorator" = "decorators/pixi.md" },
     { "Pixi Bash Operator" = "operators/bash.md" },
+    { "Pixi Task Operator" = "operators/task.md" },
     { "Pixi Kubernetes Pod Operator" = "operators/kubernetes.md" },
+    { "Pixi Branch and Short Circuit Operators" = "operators/branch.md" },
     { "Pixi Sensor" = "sensors/pixi.md" },
+    { "Deployment" = "deployment.md" },
     { "Building on the Pixi Operator" = "extending.md" },
   ] },
   { "References" = [
@@ -70,12 +73,10 @@ features = [
 logo = "lucide/wind"
 repo = "fontawesome/brands/github"
 
-# Fonts of airflow.apache.org; Rubik for headings is loaded in airflow.css
 [project.theme.font]
 text = "Roboto"
 code = "Roboto Mono"
 
-# Colors are set in airflow.css
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
 scheme = "default"
@@ -100,14 +101,14 @@ link = "https://github.com/danplischke/apache-airflow-providers-pixi"
 icon = "fontawesome/brands/python"
 link = "https://pypi.org/project/apache-airflow-providers-pixi/"
 
-# llms.txt (https://llmstxt.org): an index of the docs for LLMs, plus every page in llms-full.txt
 [project.plugins.llmstxt]
 full_output = "llms-full.txt"
 markdown_description = """
-Apache Airflow 3 provider that runs Python callables, Bash commands and sensor checks inside
-[Pixi](https://pixi.sh) environments, on the worker or in a Kubernetes pod. Install with
+Apache Airflow 3 provider that runs Python callables, Bash commands, manifest tasks, branch choices and
+sensor checks inside [Pixi](https://pixi.sh) environments, on the worker or in a Kubernetes pod. Install with
 `pip install apache-airflow-providers-pixi` (add the `[cncf.kubernetes]` extra for the pod operator);
-the workers need pixi 0.81.0 or newer, which the provider never installs itself. An environment is a
+it needs Apache Airflow 3.1.2 or newer, and the workers need pixi 0.81.0 or newer, which the provider
+never installs itself. An environment is a
 Pixi project (`pixi_project_path`), a manifest file (`pixi_toml_path`), or an inline manifest
 (`dependencies`, `pypi_dependencies`, `requirements`). Functions are shipped as source, so they must
 be self-contained: imports inside the function, no variables from enclosing functions.
@@ -117,22 +118,26 @@ be self-contained: imports inside the function, no variables from enclosing func
 Basics = [
   { "index.md" = "Installation, requirements and a quick start" },
   { "changelog.md" = "Changes per release" },
-  { "security.md" = "Security considerations: installing pixi, run-time dependency resolution, pickle, caches" },
+  { "security.md" = "Security considerations: installing pixi, run-time dependency resolution, pickle, caches, credentials" },
 ]
 Guides = [
-  { "operators/pixi.md" = "PixiOperator: choosing the environment, inline manifests, arguments and return values, logs, timeouts, cache directories" },
+  { "connections/pixi.md" = "The pixi connection type: credentials for private conda channels and PyPI indexes" },
+  { "operators/pixi.md" = "PixiOperator: choosing the environment, the lock file, platforms, inline manifests, arguments, the Airflow context, return values, errors, environment variables from Variables and Connections, logs, timeouts, cache directories" },
   { "decorators/pixi.md" = "@task.pixi and how to write a function that is shipped to the environment" },
-  { "operators/bash.md" = "PixiBashOperator and @task.pixi_bash: Bash commands with pixi run" },
-  { "operators/kubernetes.md" = "PixiKubernetesPodOperator and @task.pixi_kubernetes: Pixi environments in Kubernetes pods" },
+  { "operators/bash.md" = "PixiBashOperator and @task.pixi_bash: Bash commands with pixi run, and their environment variables" },
+  { "operators/task.md" = "PixiTaskOperator: run a [tasks] entry of a pixi manifest with pixi run <task> [args]" },
+  { "operators/kubernetes.md" = "PixiKubernetesPodOperator and @task.pixi_kubernetes: Pixi environments in Kubernetes pods, deferrable mode, size limits, errors" },
+  { "operators/branch.md" = "PixiBranchOperator, PixiShortCircuitOperator, @task.pixi_branch and @task.pixi_short_circuit: choose or skip downstream tasks with a callable in a Pixi environment" },
   { "sensors/pixi.md" = "PixiSensor and @task.pixi_sensor: sensor checks inside a Pixi environment" },
+  { "deployment.md" = "Deploying: pixi in the worker image, shared caches, env_cache_path, projects in DAG bundles, private channels, pods" },
   { "extending.md" = "Building other providers' operators and decorators on the Pixi base classes" },
 ]
 "Development" = [
   { "system-tests.md" = "Example DAGs and how to run the unit, integration and system tests" },
-  { "installing-from-sources.md" = "Installing from sources, the local Airflow and building the docs" },
+  { "installing-from-sources.md" = "Installing from sources, the local Airflow, building the docs, the CI Airflow matrix and the release process" },
 ]
 Optional = [
-  { "api.md" = "Python API reference of every operator, sensor, decorator and base class" },
+  { "api.md" = "Python API reference of every operator, sensor, decorator, hook, exception and base class" },
 ]
 
 [project.plugins.mkdocstrings.handlers.python]
@@ -178,7 +183,6 @@ pymdownx.inlinehilite = {}
 pymdownx.keys = {}
 pymdownx.magiclink = {}
 pymdownx.smartsymbols = {}
-# examples are included from tests/system, relative to the repository root
 pymdownx.snippets.base_path = ["."]
 pymdownx.snippets.check_paths = true
 pymdownx.snippets.dedent_subsections = true

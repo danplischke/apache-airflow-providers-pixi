@@ -1,7 +1,5 @@
 name: Docs
 
-# Builds the documentation on every PR, and publishes it to GitHub Pages from main.
-# Requires Settings → Pages → Build and deployment → Source: "GitHub Actions".
 on:
   push:
     branches: [main]

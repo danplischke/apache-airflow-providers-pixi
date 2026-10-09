@@ -13,12 +13,12 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from airflow.exceptions import AirflowException
 from airflow.sdk import DAG, task
 from airflow.sdk.bases.decorator import task_decorator_factory
 
 from airflow.providers.pixi.decorators.pixi import PixiDecoratedOperator
 from airflow.providers.pixi.operators.pixi import PixiOperator
+from airflow.providers.pixi.utils.compat import AirflowException
 
 if sys.version_info >= (3, 11):
     import tomllib as tomli
@@ -27,7 +27,6 @@ else:
 
 INLINE = {"dependencies": {"python": "3.12.*"}}
 
-# shipped as source next to the user function, so the environment needs no Airflow and no provider
 RUNTIME = """
 
 def _run_wrapped(fn, args, kwargs, label):
@@ -73,7 +72,6 @@ class WrappingMixin:
 class WrappedPixiDecoratedOperator(WrappingMixin, PixiDecoratedOperator):
     custom_operator_name = "@task.wrapped_pixi"
 
-    # BaseOperatorMeta expects the most-derived class to define __init__
     def __init__(self, *, tag: str = "wrapped", **kwargs: Any) -> None:
         super().__init__(tag=tag, **kwargs)
 
@@ -116,7 +114,6 @@ def manifest_of(fake_pixi) -> str:
 
 
 def test_mixin_wraps_a_task_pixi_function(fake_pixi, monkeypatch) -> None:
-    # as a provider's task-decorators entry would register it; its line is stripped from the shipped source
     monkeypatch.setattr(task, "wrapped_pixi", wrapped_pixi_task, raising=False)
     with DAG("wrapped") as dag:
 
@@ -134,9 +131,27 @@ def test_mixin_wraps_a_task_pixi_function(fake_pixi, monkeypatch) -> None:
     op = dag.get_task("double")
     assert op.execute({"ti": MagicMock()}) == {"label": "step", "result": 42, "token": "secret"}
     assert tomli.loads(manifest_of(fake_pixi))["pypi-dependencies"] == {"pandas": "*", "wrapper-runtime": ">=1"}
-    # restored after the run, so a retry starts from the DAG's arguments
     assert op.env_vars is None
     assert op.requirements == []
+
+
+def test_mixin_gets_the_source_of_pixi_operator_through_super(monkeypatch) -> None:
+    monkeypatch.setattr(task, "wrapped_pixi", wrapped_pixi_task, raising=False)
+    with DAG("wrapped") as dag:
+
+        @task.wrapped_pixi(**INLINE)
+        def triple(x: int) -> int:
+            return x * 3
+
+        triple(1)
+
+    op = dag.get_task("triple")
+    op._wrapper_config = {"label": "step"}
+    lines = op.get_python_source().splitlines()
+    assert not any("@task.wrapped_pixi" in line for line in lines)
+    start = lines.index("def triple(x: int) -> int:")
+    assert Path(__file__).read_text().splitlines()[start].strip() == lines[start]
+    assert "_run_wrapped" in lines[-1]
 
 
 def test_unwrapped_source_is_unchanged_outside_execute() -> None:
@@ -159,7 +174,6 @@ def test_operator_ships_generated_source_for_a_placeholder(fake_pixi) -> None:
 
 
 def test_wrapper_requirements_cannot_extend_a_project_environment(fake_pixi, tmp_path: Path) -> None:
-    # the mixin checks inline_manifest; one that does not fails with a pointer to the manifest
     op = PixiOperator(
         task_id="t",
         pixi_project_path=str(tmp_path),

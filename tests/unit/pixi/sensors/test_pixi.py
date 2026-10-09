@@ -7,9 +7,10 @@ from unittest.mock import MagicMock
 
 import pytest
 from airflow.sdk import DAG, task
-from airflow.sdk.exceptions import AirflowSensorTimeout
 
+from airflow.providers.pixi.exceptions import PixiCallableError
 from airflow.providers.pixi.sensors.pixi import PixiSensor
+from airflow.providers.pixi.utils.compat import AirflowSensorTimeout, AirflowSkipException
 
 INLINE = {"dependencies": {"python": "3.12.*"}}
 
@@ -29,7 +30,9 @@ def with_xcom(value):
 
 def make(fake_pixi, **kwargs) -> PixiSensor:
     kwargs.setdefault("poke_interval", 0.01)
-    return PixiSensor(task_id="s", pixi_binary=str(fake_pixi.path), **INLINE, **kwargs)
+    if "pixi_project_path" not in kwargs:
+        kwargs.update(INLINE)
+    return PixiSensor(task_id="s", pixi_binary=str(fake_pixi.path), **kwargs)
 
 
 def context() -> dict:
@@ -40,7 +43,6 @@ def test_pokes_until_the_callable_returns_true(fake_pixi, tmp_path: Path) -> Non
     counter = tmp_path / "pokes"
     make(fake_pixi, python_callable=ready_on_third_poke, op_args=[str(counter)]).execute(context())
     assert counter.read_text() == "..."
-    # one inline environment for every poke of the run
     assert len({call["argv"][2] for call in fake_pixi.calls}) == 1
     assert not Path(fake_pixi.calls[-1]["argv"][2]).exists()
 
@@ -79,6 +81,28 @@ def test_task_pixi_sensor_ships_the_function_without_its_decorator(fake_pixi, tm
 
     op = dag.get_task("file_exists")
     assert type(op).__name__ == "PixiDecoratedSensorOperator"
-    assert dag.get_task("file_exists__1")  # unique task ids, as for @task.sensor
+    assert dag.get_task("file_exists__1")
     assert "@task.pixi_sensor" not in op.get_python_source()
     assert op.execute(context()) == str(tmp_path)
+
+
+def test_an_exception_in_a_poke_names_the_callable(fake_pixi) -> None:
+    with pytest.raises(PixiCallableError, match="ast:literal_eval raised SyntaxError"):
+        make(fake_pixi, python_callable="ast:literal_eval", op_args=["{"]).execute(context())
+
+
+def test_skip_on_exit_code_skips_the_sensor(fake_pixi) -> None:
+    with pytest.raises(AirflowSkipException):
+        make(fake_pixi, python_callable="sys:exit", op_args=[42], skip_on_exit_code=42).execute(context())
+
+
+def test_relative_project_path_is_relative_to_the_dag_file(fake_pixi, tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "project").mkdir()
+    monkeypatch.chdir("/")
+    with DAG("d") as dag:
+        dag.fileloc = str(tmp_path / "my_dag.py")
+        sensor = make(
+            fake_pixi, python_callable="operator:truth", op_args=[1], pixi_project_path="project", lock_mode="locked"
+        )
+    sensor.execute(context())
+    assert fake_pixi.calls[-1]["argv"][:4] == ["run", "--manifest-path", str(tmp_path / "project"), "--locked"]

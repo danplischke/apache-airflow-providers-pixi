@@ -16,8 +16,15 @@ This package is for the `pixi` provider. All classes for this provider package a
 |---|---|---|
 | [`PixiOperator`](operators/pixi.md) | [`@task.pixi`](decorators/pixi.md) | runs a Python callable in a Pixi environment on the worker |
 | [`PixiBashOperator`](operators/bash.md) | `@task.pixi_bash` | runs a Bash command in a Pixi environment, like `BashOperator` |
+| [`PixiTaskOperator`](operators/task.md) | - | runs a task from the manifest's `[tasks]` with `pixi run <task>` |
 | [`PixiKubernetesPodOperator`](operators/kubernetes.md) | `@task.pixi_kubernetes` | runs a Python callable in a Pixi environment in a Kubernetes pod |
+| [`PixiBranchOperator`](operators/branch.md) | `@task.pixi_branch` | chooses the tasks to follow with a Python callable run in a Pixi environment, like `BranchPythonVirtualenvOperator` |
+| [`PixiShortCircuitOperator`](operators/branch.md#short-circuit) | `@task.pixi_short_circuit` | skips the tasks downstream when a Python callable, run in a Pixi environment, returns a falsy value, like `ShortCircuitOperator` |
 | [`PixiSensor`](sensors/pixi.md) | `@task.pixi_sensor` | waits for a Python callable, run in a Pixi environment, to return a truthy value |
+
+The [`pixi` connection type](connections/pixi.md) holds credentials for private conda channels and
+PyPI indexes, and [`PixiCallableError`][airflow.providers.pixi.exceptions.PixiCallableError] is the
+error a task fails with when the function raises inside the environment.
 
 Other providers can build their own operators and decorators on these; see
 [Building on the Pixi Operator](extending.md).
@@ -30,16 +37,20 @@ You can install this package on top of an existing Airflow installation via
 [Requirements](#requirements) below.
 
 The workers also need [Pixi](https://pixi.sh/latest/installation/), installed for example in the
-worker image. The provider never installs it; see [Pixi binary](operators/pixi.md#pixi-binary).
+worker image. The provider never installs it; see [Pixi binary](operators/pixi.md#pixi-binary) and the
+[deployment guide](deployment.md).
 
 ## Requirements
 
-The minimum Apache Airflow version supported by this provider distribution is `3.0`.
+The minimum Apache Airflow version supported by this provider distribution is `3.1.2`. Airflow 3.0
+is not supported. The provider floors are the versions pinned by Airflow 3.1.2's constraints file, so
+the constraints file of any supported Airflow release can be used.
 
 | PIP package | Version required |
 |---|---|
-| `apache-airflow` | `>=3.0` |
-| `apache-airflow-providers-standard` | |
+| `apache-airflow` | `>=3.1.2` |
+| `apache-airflow-providers-standard` | `>=1.9.1` |
+| `jsonschema` | `>=4.19.1` |
 | `packaging` | `>=22` |
 | `tomlkit` | `>=0.12` |
 
@@ -47,7 +58,7 @@ With the `cncf.kubernetes` extra:
 
 | PIP package | Version required |
 |---|---|
-| `apache-airflow-providers-cncf-kubernetes` | |
+| `apache-airflow-providers-cncf-kubernetes` | `>=10.9.0` |
 
 On the workers:
 
@@ -55,8 +66,12 @@ On the workers:
 |---|---|
 | [`pixi`](https://pixi.sh/latest/installation/) | `>=0.81.0` |
 
-Python 3.10, 3.11, 3.12, 3.13 and 3.14 are supported. The Python inside the Pixi environment is
-independent of the worker's: it is whatever the manifest asks for.
+Python 3.10, 3.11, 3.12, 3.13 and 3.14 are supported; Airflow 3.1 itself runs on Python 3.13 at
+most, so Python 3.14 needs Airflow 3.2 or newer. CI runs the unit tests against the latest patch of
+each supported Airflow minor with its constraints file, and against the lowest allowed versions; see
+[Testing against other Airflow versions](installing-from-sources.md#testing-against-other-airflow-versions).
+The Python inside the Pixi environment is independent of the worker's: it is whatever the manifest
+asks for.
 
 ## Quick start
 
