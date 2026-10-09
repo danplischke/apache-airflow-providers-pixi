@@ -91,6 +91,14 @@ def test_invalid_arguments_are_rejected_when_the_dag_is_parsed(fake_pixi, tmp_pa
         make(fake_pixi, tmp_path, **kwargs)
 
 
+def test_task_args_with_jinja_statements_are_checked_once_rendered(fake_pixi, tmp_path: Path) -> None:
+    op = make(fake_pixi, tmp_path, task="echo", task_args="{% if params.verbose %}--verbose{% endif %}")
+    op.render_template_fields({"params": {"verbose": True}})
+    with pytest.raises(AirflowException, match="task_args must render to a list, not str"):
+        op.execute({})
+    assert fake_pixi.calls == []
+
+
 def test_rendered_values_are_checked_before_pixi_runs(fake_pixi, tmp_path: Path) -> None:
     op = make(fake_pixi, tmp_path, task="{{ params.task }}", task_args="{{ params.args }}")
     op.render_template_fields({"params": {"task": "echo", "args": "not a list"}})

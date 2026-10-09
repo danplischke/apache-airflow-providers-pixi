@@ -56,6 +56,8 @@ WORKER_PYTHON_VARIABLES = ("PYTHONPATH", "PYTHONHOME", "PYTHONUSERBASE", "VIRTUA
 """Variables of the worker's Python left out of a pixi run, so the environment's Python never imports the
 worker's packages; ``env_vars`` or ``env`` can set them for a run."""
 
+_JINJA_MARKERS = ("{{", "{%", "{#")
+
 _DECORATOR_FUNCTIONS = (
     "pixi_task",
     "pixi_kubernetes_task",
@@ -67,7 +69,7 @@ _DECORATOR_FUNCTIONS = (
 
 def _needs_rendering(value: Any) -> bool:
     if isinstance(value, str):
-        return "{{" in value
+        return any(marker in value for marker in _JINJA_MARKERS)
     if isinstance(value, dict):
         return any(_needs_rendering(item) for item in value.values())
     if isinstance(value, (list, tuple)):
@@ -188,9 +190,9 @@ class BasePixiOperator(BaseOperator):
         if not _needs_rendering(pypi_dependencies):
             pypi_dependencies_table(pypi_dependencies)
         conda_dependencies(dependencies)
-        if not (isinstance(environment, str) and "{{" in environment):
+        if not _needs_rendering(environment):
             self._checked_environment(ValueError)
-        if not (isinstance(lock_mode, str) and "{{" in lock_mode):
+        if not _needs_rendering(lock_mode):
             self._checked_lock_mode(ValueError)
 
     @property
