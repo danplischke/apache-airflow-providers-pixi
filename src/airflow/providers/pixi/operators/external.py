@@ -70,6 +70,10 @@ class PixiExternalPythonOperator(PixiSubprocessMixin, BasePixiPythonOperator):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self.pixi_conn_id = None
+        self.pixi_cache_dir_variable = None
+        self.uv_cache_dir_variable = None
+        self.pip_cache_dir_variable = None
         if self.inline_manifest:
             raise ValueError(
                 f"{type(self).__name__} runs an environment that is already installed, which an inline manifest is "

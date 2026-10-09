@@ -41,6 +41,9 @@ def run_info():
         "conda_prefix": os.environ["CONDA_PREFIX"],
         "pythonpath": os.environ.get("PYTHONPATH"),
         "stage": os.environ.get("STAGE"),
+        "pixi_cache_dir": os.environ.get("PIXI_CACHE_DIR"),
+        "uv_cache_dir": os.environ.get("UV_CACHE_DIR"),
+        "pip_cache_dir": os.environ.get("PIP_CACHE_DIR"),
     }
 
 
@@ -127,6 +130,27 @@ def test_lock_mode_from_default_args_has_no_effect(tmp_path: Path) -> None:
     with DAG("d", default_args={"lock_mode": "frozen"}):
         op = make(tmp_path, python_callable="builtins:abs", op_args=[-1])
     assert op.execute({}) == 1
+
+
+def test_pixi_connection_and_cache_variables_have_no_effect(tmp_path: Path, monkeypatch) -> None:
+    install(tmp_path)
+    for name in ("PIXI_CACHE_DIR", "UV_CACHE_DIR", "PIP_CACHE_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("AIRFLOW_VAR_PIXI_CACHE", "/shared/pixi")
+    monkeypatch.setenv("AIRFLOW_VAR_UV_CACHE", "/shared/uv")
+    monkeypatch.setenv("AIRFLOW_VAR_PIP_CACHE", "/shared/pip")
+
+    info = make(
+        tmp_path,
+        pixi_conn_id="missing_connection",
+        pixi_cache_dir_variable="pixi_cache",
+        uv_cache_dir_variable="uv_cache",
+        pip_cache_dir_variable="pip_cache",
+    ).execute({})
+
+    assert info["pixi_cache_dir"] is None
+    assert info["uv_cache_dir"] is None
+    assert info["pip_cache_dir"] is None
 
 
 def test_task_pixi_external_ships_the_function_without_its_decorator(tmp_path: Path) -> None:
