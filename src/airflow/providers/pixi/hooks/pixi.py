@@ -2,7 +2,7 @@
 
 Pixi reads conda channel credentials from the JSON file named by ``RATTLER_AUTH_FILE`` and PyPI index credentials
 from the netrc file named by ``NETRC`` (https://pixi.sh/latest/deployment/authentication/). For a run,
-:func:`pixi_auth_env` writes both to temporary files and removes them afterwards.
+[`pixi_auth_env`][pixi_auth_env] writes both to temporary files and removes them afterwards.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ class PixiCredentials:
     """Credentials for one host, from a ``pixi`` connection.
 
     :param conn_id: the connection they come from.
-    :param auth_type: one of :data:`AUTH_TYPES` except ``"auto"``.
+    :param auth_type: one of [`AUTH_TYPES`][AUTH_TYPES] except ``"auto"``.
     :param host: the host name pixi looks them up by, such as ``repo.prefix.dev`` or ``*.prefix.dev``.
     :param login: the username of ``basic_http`` and ``netrc``.
     :param secret: the token or password.
@@ -57,7 +57,7 @@ class PixiCredentials:
     secret: str = dataclasses.field(repr=False)
 
     def rattler_entry(self) -> dict[str, Any]:
-        """Return the value for :attr:`host` in pixi's credentials file, for a conda channel."""
+        """Return the value for ``host`` in pixi's credentials file, for a conda channel."""
         if self.auth_type == "bearer_token":
             return {"BearerToken": self.secret}
         if self.auth_type == "conda_token":
@@ -67,7 +67,7 @@ class PixiCredentials:
         raise ValueError(f"{self.auth_type} credentials of {self.conn_id!r} do not go into the credentials file")
 
     def netrc_entry(self) -> str:
-        """Return the netrc lines for :attr:`host`, for a PyPI index."""
+        """Return the netrc lines for ``host``, for a PyPI index."""
         return f"machine {self.host}\nlogin {self.login}\npassword {self.secret}\n"
 
 

@@ -129,18 +129,19 @@ class BasePixiOperator(BaseOperator):
         a list or one string that may hold several lines, such as a rendered requirements file. An inline
         manifest with PyPI packages but no ``python`` dependency gets the worker's Python version.
     :param channels: channels of an inline manifest; default ``["conda-forge"]``.
-    :param platforms: platforms of an inline manifest; default :meth:`default_platforms`, the platform of the
-        machine that runs pixi.
+    :param platforms: platforms of an inline manifest; default [`default_platforms`][default_platforms], the platform of
+        the machine that runs pixi.
     :param env_cache_path: keep inline environments in ``<env_cache_path>/pixi-<hash>`` and reuse them across
         runs, like ``venv_cache_path`` of ``PythonVirtualenvOperator``. Otherwise an inline environment is
         built in a temporary directory, removed after the run unless ``cleanup_temp_manifest=False``.
     :param cleanup_temp_manifest: remove the temporary directory of an inline environment after the run.
-    :param pixi_binary: the pixi executable, a name on ``PATH`` or a path. It must be installed on the workers,
-        in version :data:`MIN_PIXI_VERSION` or newer; the provider never installs it.
+    :param pixi_binary: the pixi executable, a name on ``PATH`` or a path. It must be installed on the workers, in
+        version [`MIN_PIXI_VERSION`][airflow.providers.pixi.utils.pixi.MIN_PIXI_VERSION] or newer; the provider never
+        installs it.
 
-    Where pixi runs on the worker (:meth:`local_manifest`), a relative ``pixi_project_path``, ``pixi_toml_path``
-    or ``env_cache_path`` is relative to the directory of the DAG file there, or to the working directory for a
-    task without a DAG.
+    Where pixi runs on the worker ([`local_manifest`][local_manifest]), a relative ``pixi_project_path``,
+    ``pixi_toml_path`` or ``env_cache_path`` is relative to the directory of the DAG file there, or to the working
+    directory for a task without a DAG.
     """
 
     template_fields: Sequence[str] = (
@@ -197,7 +198,10 @@ class BasePixiOperator(BaseOperator):
 
     @property
     def inline_manifest(self) -> bool:
-        """Whether the environment comes from an inline manifest, the only one :meth:`add_pypi_dependencies` extends."""
+        """Whether the environment comes from an inline manifest.
+
+        Only an inline manifest can be extended with [`add_pypi_dependencies`][add_pypi_dependencies].
+        """
         return self.pixi_project_path is None and self.pixi_toml_path is None
 
     def add_pypi_dependencies(self, *requirements: str) -> None:
@@ -285,7 +289,10 @@ class BasePixiOperator(BaseOperator):
         return options
 
     def pixi_run_command(self, pixi: str, manifest: str) -> list[str]:
-        """Return ``pixi run`` with the manifest and :meth:`pixi_run_options`, ready for the command to run."""
+        """Return ``pixi run`` with the manifest and [`pixi_run_options`][pixi_run_options].
+
+        The command to run in the environment goes after it.
+        """
         return [pixi, "run", "--manifest-path", manifest, *self.pixi_run_options()]
 
     def _local_path(self, path: str) -> str:
@@ -346,7 +353,7 @@ class BasePixiOperator(BaseOperator):
 
     @contextlib.contextmanager
     def holding_manifest(self) -> Iterator[None]:
-        """Keep one :meth:`local_manifest` for every use inside, such as the pokes of one sensor run."""
+        """Keep one [`local_manifest`][local_manifest] for every use inside, such as the pokes of one sensor run."""
         with self.local_manifest() as held:
             self._held_manifest = held
             try:
@@ -358,7 +365,7 @@ class BasePixiOperator(BaseOperator):
 class BasePixiPythonOperator(BasePixiOperator):
     """Base class of the Pixi operators that call a Python function inside the environment.
 
-    Accepts every :class:`BasePixiOperator` argument, plus:
+    Accepts every [`BasePixiOperator`][BasePixiOperator] argument, plus:
 
     :param python_callable: a function, whose source is shipped to the environment and run there, so it
         must be self-contained (imports inside it, no variables from enclosing functions); or a
@@ -370,13 +377,14 @@ class BasePixiPythonOperator(BasePixiOperator):
         values JSON cannot hold, whose types must then be importable on both sides.
 
     Parameters of the callable named after a key of
-    :data:`~airflow.providers.pixi.utils.context.CONTEXT_KEYS`, such as ``ds``, ``params`` or ``run_id``, get
+    [`CONTEXT_KEYS`][airflow.providers.pixi.utils.context.CONTEXT_KEYS], such as ``ds``, ``params`` or ``run_id``, get
     the task's value when ``op_args`` and ``op_kwargs`` leave them unset, and a ``**kwargs`` parameter gets all
     of them, as for ``@task.virtualenv``. Dates and datetimes arrive as ISO 8601 strings.
 
     Subclasses and mixins can change what runs, the same way as for ``@task.virtualenv``: override
-    :meth:`get_python_source`, and set ``op_args`` or ``op_kwargs``, or call :meth:`add_pypi_dependencies`, in
-    ``execute`` before calling ``super().execute``.
+    [`get_python_source`][get_python_source], and set ``op_args`` or ``op_kwargs``, or call
+    [`add_pypi_dependencies`][BasePixiOperator.add_pypi_dependencies], in ``execute`` before calling
+    ``super().execute``.
     """
 
     template_fields: Sequence[str] = (*BasePixiOperator.template_fields, "op_args", "op_kwargs")
@@ -426,7 +434,8 @@ class BasePixiPythonOperator(BasePixiOperator):
         """Return the runner's input: the callable, its arguments and the task context, in the ``serializer``'s format.
 
         :param context: the task context, of which the runner passes the JSON-safe part
-            (:func:`~airflow.providers.pixi.utils.context.serializable_context`) to parameters named after its keys.
+            ([`serializable_context`][airflow.providers.pixi.utils.context.serializable_context]) to parameters named
+            after its keys.
         """
         if isinstance(self.python_callable, str):
             module, _, name = self.python_callable.partition(":")
@@ -472,13 +481,13 @@ class PixiRunEnvMixin(BaseOperator):
         ``{"DB_PASSWORD": "warehouse.password"}``. A missing connection or field fails the task. Passwords, URIs
         and extras are masked in the task log.
     :param pixi_conn_id: one or several connections of type ``pixi``
-        (:class:`~airflow.providers.pixi.hooks.pixi.PixiHook`) with credentials for private conda channels or
+        ([`PixiHook`][airflow.providers.pixi.hooks.pixi.PixiHook]) with credentials for private conda channels or
         PyPI indexes. Written to temporary files for the run, which ``RATTLER_AUTH_FILE`` and ``NETRC`` point at.
     :param pixi_cache_dir_variable: key of an Airflow Variable holding ``PIXI_CACHE_DIR`` for the run (templated);
         likewise ``uv_cache_dir_variable`` (``UV_CACHE_DIR``) and ``pip_cache_dir_variable`` (``PIP_CACHE_DIR``).
         A missing Variable leaves the environment variable unset.
 
-    :meth:`pixi_run_env` builds the run's environment from them.
+    [`pixi_run_env`][pixi_run_env] builds the run's environment from them.
     """
 
     template_fields: Sequence[str] = ("pixi_cache_dir_variable", "uv_cache_dir_variable", "pip_cache_dir_variable")
@@ -509,13 +518,13 @@ class PixiRunEnvMixin(BaseOperator):
     ) -> Iterator[dict[str, str]]:
         """Yield the environment of a pixi run, valid until the block exits.
 
-        In increasing precedence: ``base`` (usually the worker's environment) without the worker's Python
-        settings (:data:`WORKER_PYTHON_VARIABLES`) and with ``PYTHONNOUSERSITE=1``, so the environment's Python
-        imports only what the Pixi environment has; the cache directory Variables; ``env_from_variables`` and
-        ``env_from_connections``; then ``overrides`` (such as ``env_vars``), which can set those Python variables
-        again. With ``pixi_conn_id``, ``RATTLER_AUTH_FILE`` and ``NETRC`` point at temporary files with the
-        credentials, merged with the files these variables named before (see
-        :func:`~airflow.providers.pixi.hooks.pixi.pixi_auth_env`), and removed when the block exits.
+        In increasing precedence: ``base`` (usually the worker's environment) without the worker's Python settings
+        ([`WORKER_PYTHON_VARIABLES`][WORKER_PYTHON_VARIABLES]) and with ``PYTHONNOUSERSITE=1``, so the environment's
+        Python imports only what the Pixi environment has; the cache directory Variables; ``env_from_variables`` and
+        ``env_from_connections``; then ``overrides`` (such as ``env_vars``), which can set those Python variables again.
+        With ``pixi_conn_id``, ``RATTLER_AUTH_FILE`` and ``NETRC`` point at temporary files with the credentials, merged
+        with the files these variables named before (see
+        [`pixi_auth_env`][airflow.providers.pixi.hooks.pixi.pixi_auth_env]), and removed when the block exits.
         """
         env = {name: value for name, value in base.items() if name not in WORKER_PYTHON_VARIABLES}
         env["PYTHONNOUSERSITE"] = "1"
@@ -539,7 +548,7 @@ class PixiRunEnvMixin(BaseOperator):
 class PixiSubprocessMixin(PixiRunEnvMixin):
     """Run the runner with pixi on the worker, streaming its output to the task log.
 
-    Accepts every :class:`PixiRunEnvMixin` argument, plus:
+    Accepts every [`PixiRunEnvMixin`][PixiRunEnvMixin] argument, plus:
 
     :param env_vars: environment variables for the run, on top of all others. Not templated, so secrets
         set here are never rendered into the UI.
@@ -548,8 +557,8 @@ class PixiSubprocessMixin(PixiRunEnvMixin):
         exits with 1, and so does pixi when it cannot prepare the environment.
 
     An exception raised by the callable fails the task with
-    :class:`~airflow.providers.pixi.exceptions.PixiCallableError`, which names the callable and the exception;
-    other failures of the run fail it with pixi's exit code and the last lines of output.
+    [`PixiCallableError`][airflow.providers.pixi.exceptions.PixiCallableError], which names the callable and the
+    exception; other failures of the run fail it with pixi's exit code and the last lines of output.
     ``execution_timeout`` and killing the task stop pixi and everything it started.
     """
 
@@ -639,15 +648,16 @@ class PixiSubprocessMixin(PixiRunEnvMixin):
 class PixiOperator(PixiSubprocessMixin, BasePixiPythonOperator):
     """Run a Python callable inside a Pixi environment on the worker.
 
-    Accepts every :class:`BasePixiPythonOperator` and :class:`BasePixiOperator` argument, plus those of
-    :class:`PixiSubprocessMixin` and :class:`PixiRunEnvMixin`: ``env_vars``, ``env_from_variables``,
-    ``env_from_connections``, ``pixi_conn_id``, the cache directory Variables and ``skip_on_exit_code``. The
-    return value is the task's XCom. The output of the run is streamed to the task log; ``execution_timeout``
-    and killing the task stop pixi and everything it started.
+    Accepts every [`BasePixiPythonOperator`][BasePixiPythonOperator] and [`BasePixiOperator`][BasePixiOperator]
+    argument, plus those of [`PixiSubprocessMixin`][PixiSubprocessMixin] and [`PixiRunEnvMixin`][PixiRunEnvMixin]:
+    ``env_vars``, ``env_from_variables``, ``env_from_connections``, ``pixi_conn_id``, the cache directory Variables and
+    ``skip_on_exit_code``. The return value is the task's XCom. The output of the run is streamed to the task log;
+    ``execution_timeout`` and killing the task stop pixi and everything it started.
 
     Subclasses and mixins can change what runs, the same way as for ``@task.virtualenv``: override
-    :meth:`get_python_source`, and set ``op_args``, ``op_kwargs`` or ``env_vars``, or call
-    :meth:`add_pypi_dependencies`, in ``execute`` before calling ``super().execute``.
+    [`get_python_source`][BasePixiPythonOperator.get_python_source], and set ``op_args``, ``op_kwargs`` or ``env_vars``,
+    or call [`add_pypi_dependencies`][BasePixiOperator.add_pypi_dependencies], in ``execute`` before calling
+    ``super().execute``.
     """
 
     template_fields: Sequence[str] = (*BasePixiPythonOperator.template_fields, *PixiSubprocessMixin.template_fields)
@@ -666,9 +676,9 @@ class PixiBranchOperator(PixiOperator, BranchMixIn):
     them all. A task group id stands for the group's root tasks. As for ``BranchPythonOperator``, the return value
     becomes the task's XCom only when nothing is skipped: otherwise Airflow's task runner handles the skips instead.
 
-    Accepts every :class:`PixiOperator` argument; context parameters such as ``params`` reach the callable as for
-    :class:`PixiOperator`. A task id that is not in the DAG fails the task, and so does a return value that is
-    neither a string, a list of strings nor ``None``.
+    Accepts every [`PixiOperator`][PixiOperator] argument; context parameters such as ``params`` reach the callable as
+    for [`PixiOperator`][PixiOperator]. A task id that is not in the DAG fails the task, and so does a return value that
+    is neither a string, a list of strings nor ``None``.
     """
 
     inherits_from_skipmixin = True
@@ -685,8 +695,8 @@ class PixiShortCircuitOperator(PixiOperator, SkipMixin):
     downstream of this one are skipped, except teardown tasks. As for ``ShortCircuitOperator``, the return value
     becomes the task's XCom only when nothing is skipped: a truthy one, or a falsy one without downstream tasks.
 
-    Accepts every :class:`PixiOperator` argument; context parameters such as ``params`` reach the callable as for
-    :class:`PixiOperator`. Plus:
+    Accepts every [`PixiOperator`][PixiOperator] argument; context parameters such as ``params`` reach the callable as
+    for [`PixiOperator`][PixiOperator]. Plus:
 
     :param ignore_downstream_trigger_rules: if ``True`` (default), skip every task downstream of this one,
         whatever its trigger rule. If ``False``, skip only the tasks directly downstream, and let the trigger

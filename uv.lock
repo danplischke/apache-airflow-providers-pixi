@@ -453,7 +453,6 @@ wheels = [
 
 [[package]]
 name = "apache-airflow-providers-pixi"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "apache-airflow" },

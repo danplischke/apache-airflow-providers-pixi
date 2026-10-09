@@ -21,7 +21,7 @@ class PixiTaskOperator(PixiBashOperator):
     controls, such as ``dag_run.conf``. A name that is not a task is run as a command of the environment, as
     ``pixi run`` does.
 
-    Accepts every :class:`~airflow.providers.pixi.operators.bash.PixiBashOperator` argument except
+    Accepts every [`PixiBashOperator`][airflow.providers.pixi.operators.bash.PixiBashOperator] argument except
     ``bash_command``: ``env``, ``append_env``, ``env_vars``, ``env_from_variables``, ``env_from_connections``,
     ``pixi_conn_id``, the cache directory Variables, ``skip_on_exit_code`` (default 99), ``output_processor``
     and ``cwd``, which defaults to the manifest's directory. The last line of output is the task's XCom. The

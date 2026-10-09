@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__version__ = "0.1.0"
+__version__: str
 
 _EXPORTS = {
     "PixiBashOperator": "airflow.providers.pixi.operators.bash",
@@ -31,6 +31,13 @@ __all__ = (
 
 
 def __getattr__(name: str) -> Any:
+    if name == "__version__":
+        from importlib.metadata import PackageNotFoundError, version
+
+        try:
+            return version("apache-airflow-providers-pixi")
+        except PackageNotFoundError:
+            return "0.0.0"
     if name in _EXPORTS:
         import importlib
 

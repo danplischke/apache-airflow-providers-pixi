@@ -16,7 +16,7 @@ class PixiSensor(PixiSubprocessMixin, BasePixiPythonOperator, BaseSensorOperator
     """Wait for a Python callable, run inside a Pixi environment on each poke, to return a truthy value.
 
     Like ``PythonSensor``, but the callable runs in the Pixi environment, as for
-    :class:`~airflow.providers.pixi.operators.pixi.PixiOperator`, whose arguments it accepts, together with
+    [`PixiOperator`][airflow.providers.pixi.operators.pixi.PixiOperator], whose arguments it accepts, together with
     every ``BaseSensorOperator`` argument (``poke_interval``, ``timeout``, ``mode``, ``soft_fail``, ...).
 
     To finish with an XCom value, return ``{"is_done": True, "xcom_value": value}``, the fields of

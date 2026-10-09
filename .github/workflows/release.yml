@@ -22,19 +22,19 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
-        with:
-          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
-
-      - name: Compare the tag with pyproject.toml
+      - name: Compare the tag with provider.yaml and the changelog
         run: |
-          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error file=pyproject.toml::Tag ${GITHUB_REF_NAME} does not match version ${version} in pyproject.toml"
+          provider=$(awk '/^versions:/ { getline; sub(/^ *- */, ""); print; exit }' provider.yaml)
+          changelog=$(sed -n 's/^## //p' docs/changelog.md | head -1)
+          if [ "v${provider}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error file=provider.yaml::Tag ${GITHUB_REF_NAME} does not match the newest version ${provider} in provider.yaml"
             exit 1
           fi
-          echo "Tag ${GITHUB_REF_NAME} matches version ${version}"
+          if [ "v${changelog}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error file=docs/changelog.md::Tag ${GITHUB_REF_NAME} does not match the newest section ${changelog} in docs/changelog.md"
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} matches version ${provider}"
 
   build:
     name: Build Package
@@ -42,6 +42,8 @@ jobs:
     needs: [qa, check-version]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 — https://github.com/actions/checkout/releases/tag/v7.0.0
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
@@ -53,6 +55,17 @@ jobs:
 
       - name: Build package
         run: uv build
+
+      - name: Compare the built version with the tag
+        run: |
+          wheel=$(unzip -p dist/*.whl '*.dist-info/METADATA' | sed -n 's/^Version: //p')
+          pkg_info=$(tar -tzf dist/*.tar.gz | grep '^[^/]*/PKG-INFO$')
+          sdist=$(tar -xzOf dist/*.tar.gz "${pkg_info}" | sed -n 's/^Version: //p')
+          if [ "v${wheel}" != "${GITHUB_REF_NAME}" ] || [ "v${sdist}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match the built wheel ${wheel} and sdist ${sdist}"
+            exit 1
+          fi
+          echo "Built ${wheel} for tag ${GITHUB_REF_NAME}"
 
       - name: Check package
         # twine < 7 rejects newer Metadata-Version values that PyPI accepts.

@@ -11,7 +11,7 @@ class PixiCallableError(AirflowException):
     """The Python callable raised an exception inside the Pixi environment.
 
     The message names the callable and the exception, such as ``train raised ValueError: no rows``; the
-    traceback is in the task log, where the run printed it, and in :attr:`traceback`.
+    traceback is in the task log, where the run printed it, and in ``traceback``.
 
     :param callable_name: the function's name, or the ``"module.path:callable_name"`` string.
     :param error_type: the exception's class, with its module unless it is a built-in, such as ``ValueError``

@@ -137,15 +137,16 @@ lock:
 upgrade:
     uv lock --upgrade
 
+# The version hatch-vcs computes for the working tree: the tag on a tagged commit, a .devN version after it
 [group('package')]
 version:
-    @uv version --short
+    @uvx --quiet --from hatchling --with hatch-vcs hatchling version
 
 [group('package')]
 versions:
     @git tag -l "v*" --sort=-v:refname | head -10
 
-# Set the version in pyproject.toml, __init__.py and provider.yaml, e.g. `just bump 0.2.0`
+# Add <ver> to the versions in provider.yaml and check that it is the newest heading in docs/changelog.md, e.g. `just bump 0.2.0`
 [group('package')]
 bump ver:
     #!/usr/bin/env python3
@@ -156,27 +157,31 @@ bump ver:
     if not re.fullmatch(r"\d+\.\d+\.\d+((a|b|rc)\d+)?", ver):
         raise SystemExit(f"not a version: {ver}")
 
-    def sub(path, pattern, replacement):
-        file = Path(path)
-        text, count = re.subn(pattern, replacement, file.read_text(), count=1, flags=re.M)
-        if count != 1:
-            raise SystemExit(f"{path}: no match for {pattern}")
-        file.write_text(text)
+    provider = Path("provider.yaml")
+    text = provider.read_text()
+    versions = re.search(r"^versions:\n((?:  - .*\n)*)", text, flags=re.M)
+    if versions is None:
+        raise SystemExit("provider.yaml has no versions list")
+    listed = re.findall(r"^  - (.*)$", versions.group(1), flags=re.M)
+    if ver not in listed:
+        provider.write_text(text[: versions.start(1)] + f"  - {ver}\n" + text[versions.start(1) :])
+    elif listed[0] != ver:
+        raise SystemExit(f"provider.yaml lists {ver} after {listed[0]}")
 
-    sub("pyproject.toml", r'^version = ".*"$', f'version = "{ver}"')
-    sub("src/airflow/providers/pixi/__init__.py", r'^__version__ = ".*"$', f'__version__ = "{ver}"')
-    if f"  - {ver}\n" not in Path("provider.yaml").read_text():
-        sub("provider.yaml", r"^versions:\n", f"versions:\n  - {ver}\n")
-    if f"## {ver}" not in Path("docs/changelog.md").read_text():
-        print(f"docs/changelog.md has no '## {ver}' section yet")
-    print(f"version {ver}; run `just lock` to update uv.lock")
+    headings = re.findall(r"^## (.+?)\s*$", Path("docs/changelog.md").read_text(), flags=re.M)
+    if not headings or headings[0] != ver:
+        raise SystemExit(f"provider.yaml is at {ver}; add '## {ver}' as the first section of docs/changelog.md")
+    print(f"provider.yaml and docs/changelog.md are at {ver}; merge to main, then run `just release {ver}`")
 
 # Tag and push v<ver> from a clean main; the release workflow builds and publishes it
 [group('publish')]
 release ver:
     #!/usr/bin/env sh
     set -eu
-    [ "$(uv version --short)" = "{{ ver }}" ] || { echo "pyproject.toml is at $(uv version --short), not {{ ver }}; run just bump {{ ver }}"; exit 1; }
+    provider=$(awk '/^versions:/ { getline; sub(/^ *- */, ""); print; exit }' provider.yaml)
+    changelog=$(sed -n 's/^## //p' docs/changelog.md | head -1)
+    [ "$provider" = "{{ ver }}" ] || { echo "provider.yaml is at $provider, not {{ ver }}; run just bump {{ ver }}"; exit 1; }
+    [ "$changelog" = "{{ ver }}" ] || { echo "the newest section of docs/changelog.md is $changelog, not {{ ver }}"; exit 1; }
     [ "$(git branch --show-current)" = "main" ] || { echo "release from main"; exit 1; }
     [ -z "$(git status --porcelain)" ] || { echo "the working tree is not clean"; exit 1; }
     git tag -a "v{{ ver }}" -m "Release v{{ ver }}"

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["flit_core>=3.12,<5"]
-build-backend = "flit_core.buildapi"
+requires = ["hatchling>=1.30", "hatch-vcs>=0.5"]
+build-backend = "hatchling.build"
 
 [project]
 name = "apache-airflow-providers-pixi"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Apache Airflow 3 provider to run Python callables in Pixi environments (PixiOperator and @task.pixi)."
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,8 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 requires-python = ">=3.10,!=3.15"
+import-names = ["airflow.providers.pixi"]
+import-namespaces = ["airflow", "airflow.providers"]
 dependencies = [
     "apache-airflow>=3.1.2",
     "apache-airflow-providers-standard>=1.9.1",
@@ -60,14 +62,26 @@ Documentation = "https://danplischke.github.io/apache-airflow-providers-pixi/"
 [project.entry-points."apache_airflow_provider"]
 provider_info = "airflow.providers.pixi.get_provider_info:get_provider_info"
 
-[tool.flit.module]
-name = "airflow.providers.pixi"
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0"
 
-[tool.flit.sdist]
-include = [
+[tool.hatch.build.targets.wheel]
+only-include = ["src/airflow/providers/pixi"]
+sources = ["src"]
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "src/airflow/providers/pixi",
+    "tests",
     "provider.yaml",
-    "tests/",
+    ".github/workflows/qa.yml",
+    "docs/changelog.md",
+    "dev/dags",
 ]
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
