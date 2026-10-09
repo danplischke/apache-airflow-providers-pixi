@@ -7,9 +7,10 @@ and ``"name"``, with its ``"args"``, ``"kwargs"`` and an optional JSON-safe ``"c
 format. The return value goes to the output file, which keeps stdout and stderr free for the task log. With
 ``json`` as the fourth argument, a pickled result is written as a base64 JSON string, for a pod's XCom file.
 
-An exception from the callable, or an environment Python older than :data:`MIN_PYTHON`, is described in
-``<output>`` + :data:`ERROR_SUFFIX` and, when the environment variable :data:`TERMINATION_LOG_ENV` names a file,
-there too, shortened to fit a Kubernetes termination message. Either exits with 1.
+An exception from the callable, or an environment Python older than [`MIN_PYTHON`][MIN_PYTHON], is described in
+``<output>`` + [`ERROR_SUFFIX`][ERROR_SUFFIX] and, when the environment variable
+[`TERMINATION_LOG_ENV`][TERMINATION_LOG_ENV] names a file, there too, shortened to fit a Kubernetes termination message.
+Either exits with 1.
 """
 
 from __future__ import annotations

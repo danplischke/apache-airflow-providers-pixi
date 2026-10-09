@@ -20,7 +20,10 @@ pip install "apache-airflow-providers-pixi @ git+https://github.com/danplischke/
 
 ## Building the package
 
-The package is built with [flit](https://flit.pypa.io). With [uv](https://docs.astral.sh/uv/):
+The package is built with [hatchling](https://hatch.pypa.io), and [hatch-vcs](https://github.com/ofek/hatch-vcs)
+takes its version from git: a commit tagged `v0.2.0` builds as `0.2.0`, the Nth commit after it as
+`0.2.1.devN+g<commit>`, and a source tree without git metadata as `0.0.0`. `just version` prints the
+version of the working tree. With [uv](https://docs.astral.sh/uv/):
 
 ```bash
 git clone https://github.com/danplischke/apache-airflow-providers-pixi
@@ -28,6 +31,11 @@ cd apache-airflow-providers-pixi
 uv build            # writes the sdist and wheel to dist/
 pip install dist/apache_airflow_providers_pixi-*.whl
 ```
+
+The sdist keeps the version it was built with. It holds the package source, `tests/` and the files the unit
+tests read: `provider.yaml`, `.github/workflows/qa.yml`, `docs/changelog.md` and `dev/dags`. From an extracted
+sdist, `uv run --group dev pytest tests/unit` runs the unit tests. `tests/unit/pixi/test_sdist.py` fails if a
+file the tests read is left out of `[tool.hatch.build.targets.sdist]` in `pyproject.toml`.
 
 ## Trying it in a local Airflow
 
@@ -86,21 +94,23 @@ minor as the oldest entry in the matrix (`tests/unit/pixi/test_versions.py` chec
 
 ## Releasing
 
-Releases are made by pushing a tag. `.github/workflows/release.yml` then runs every QA job on the
-tag, checks that the tag is `v` plus the version in `pyproject.toml`, builds the package, uploads it
-to PyPI and only then creates the GitHub release with the same files. If any step fails, nothing
-after it runs.
+Releases are made by pushing a tag `v<version>`; the tag sets the package version. `.github/workflows/release.yml`
+then runs every QA job on the tag, checks that the tag is `v` plus the first entry of `versions` in
+`provider.yaml` and the first `## ` heading in `docs/changelog.md`, builds the package from the full git
+history, checks that the wheel and sdist have the tag's version, uploads them to PyPI and only then creates the
+GitHub release with the same files. If any step fails, nothing after it runs.
 
-1. Set the new version in `pyproject.toml`, `__version__` in `src/airflow/providers/pixi/__init__.py`,
-   as the first entry of `versions` in `provider.yaml`, and as the first `## ` heading in
-   `docs/changelog.md`. `tests/unit/pixi/test_versions.py` fails until all four agree.
+1. Add a `## 0.2.0` section at the top of `docs/changelog.md` and run `just bump 0.2.0`, which adds `0.2.0`
+   as the first entry of `versions` in `provider.yaml` and fails until the changelog has that section.
+   `tests/unit/pixi/test_versions.py` fails until the two agree.
 2. Merge to `main` and wait for QA to pass.
-3. Tag the merge commit and push the tag:
+3. On the merge commit, `just release 0.2.0` checks both files and that `main` is checked out and clean, then
+   tags `v0.2.0` and pushes the tag. Without just:
 
     ```bash
-    git tag v0.2.0
+    git tag -a v0.2.0 -m "Release v0.2.0"
     git push origin v0.2.0
     ```
 
 A version can be uploaded to PyPI only once. If the PyPI step fails because the version already
-exists, bump the version and tag again; do not move the tag.
+exists, release the next version with a new tag; do not move the tag.

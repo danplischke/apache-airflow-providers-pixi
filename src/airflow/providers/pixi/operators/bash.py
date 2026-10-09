@@ -20,11 +20,11 @@ class PixiBashOperator(PixiRunEnvMixin, BasePixiOperator, BashOperator):
     The command runs as ``pixi run --manifest-path <manifest> [--environment <env>] [--locked | --frozen] bash -c
     <command>``, so every part of it, pipes and ``&&`` included, sees the activated environment. Accepts every
     ``BashOperator`` argument (``bash_command``, ``env``, ``append_env``, ``cwd``, ``skip_on_exit_code``,
-    ``output_processor``, ...), every :class:`~airflow.providers.pixi.operators.pixi.BasePixiOperator` argument
-    for the environment, and the :class:`~airflow.providers.pixi.operators.pixi.PixiRunEnvMixin` arguments
-    ``env_from_variables``, ``env_from_connections``, ``pixi_conn_id`` and the cache directory Variables, as
-    ``PixiOperator`` does. ``cwd`` defaults to the manifest's directory. The last line of output is the task's
-    XCom, as for ``BashOperator``.
+    ``output_processor``, ...), every [`BasePixiOperator`][airflow.providers.pixi.operators.pixi.BasePixiOperator]
+    argument for the environment, and the [`PixiRunEnvMixin`][airflow.providers.pixi.operators.pixi.PixiRunEnvMixin]
+    arguments ``env_from_variables``, ``env_from_connections``, ``pixi_conn_id`` and the cache directory Variables, as
+    ``PixiOperator`` does. ``cwd`` defaults to the manifest's directory. The last line of output is the task's XCom, as
+    for ``BashOperator``.
 
     :param env_vars: environment variables for the run, on top of all others, as for ``PixiOperator``. Not
         templated, so secrets set here are never rendered into the UI.
@@ -54,7 +54,7 @@ class PixiBashOperator(PixiRunEnvMixin, BasePixiOperator, BashOperator):
         """Return the command that runs in place of ``bash_command``: ``pixi run ... bash -c <bash_command>``.
 
         Called when the task runs, as templated fields are then rendered. Override it to run something else
-        through pixi, as :class:`~airflow.providers.pixi.operators.task.PixiTaskOperator` does.
+        through pixi, as [`PixiTaskOperator`][airflow.providers.pixi.operators.task.PixiTaskOperator] does.
         """
         return [*self.pixi_run_command(pixi, manifest), "bash", "-c", str(self.bash_command)]
 
@@ -78,8 +78,8 @@ class PixiBashOperator(PixiRunEnvMixin, BasePixiOperator, BashOperator):
     def get_env(self, context: Any) -> dict[str, str]:
         """Return the environment of the run: ``BashOperator``'s, with the variables of this operator merged in.
 
-        Called by :meth:`execute`; see the class docstring for the precedence. Files written for ``pixi_conn_id``
-        exist until :meth:`execute` returns.
+        Called by ``execute``; see the class docstring for the precedence. Files written for ``pixi_conn_id``
+        exist until ``execute`` returns.
         """
         if self._env_stack is None:
             raise AirflowException(f"{type(self).__name__}.get_env can only be called from execute")

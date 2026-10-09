@@ -71,20 +71,22 @@ def _pod_path(path: str) -> str:
 class PixiKubernetesPodOperator(BasePixiPythonOperator, KubernetesPodOperator):
     """Run a Python callable inside a Pixi environment in a Kubernetes pod.
 
-    Accepts every :class:`~airflow.providers.pixi.operators.pixi.BasePixiPythonOperator` argument and every
-    ``KubernetesPodOperator`` argument except ``cmds`` and ``arguments``, which run the callable. Paths
-    (``pixi_project_path``, ``pixi_toml_path``, ``env_cache_path``) are paths in the pod, a relative one relative
-    to the image's working directory, and ``pixi_binary`` is the pixi executable of the image.
+    Accepts every [`BasePixiPythonOperator`][airflow.providers.pixi.operators.pixi.BasePixiPythonOperator] argument and
+    every ``KubernetesPodOperator`` argument except ``cmds`` and ``arguments``, which run the callable. Paths
+    (``pixi_project_path``, ``pixi_toml_path``, ``env_cache_path``) are paths in the pod, a relative one relative to the
+    image's working directory, and ``pixi_binary`` is the pixi executable of the image.
 
-    :param image: an image with pixi :data:`~airflow.providers.pixi.utils.pixi.MIN_PIXI_VERSION` or newer, GNU
-        ``sort`` and ``base64``, and the project for ``pixi_project_path``. Default :data:`DEFAULT_IMAGE`.
+    :param image: an image with pixi [`MIN_PIXI_VERSION`][airflow.providers.pixi.utils.pixi.MIN_PIXI_VERSION] or newer,
+        GNU ``sort`` and ``base64``, and the project for ``pixi_project_path``. Default
+        [`DEFAULT_IMAGE`][DEFAULT_IMAGE].
 
     The function's source, its arguments, the task context and an inline manifest reach the pod in environment
-    variables, so they are visible in the pod's spec, and each must stay under :data:`MAX_ENV_VALUE_BYTES`. The
-    return value comes back through the XCom sidecar (``do_xcom_push`` defaults to ``True`` here), also with
-    ``deferrable=True``. An inline manifest without ``platforms`` is solved for :data:`DEFAULT_POD_PLATFORMS`, in
-    the pod on each run; mount a volume at ``env_cache_path`` to reuse it. An exception raised by the callable
-    fails the task with :class:`~airflow.providers.pixi.exceptions.PixiCallableError`.
+    variables, so they are visible in the pod's spec, and each must stay under
+    [`MAX_ENV_VALUE_BYTES`][MAX_ENV_VALUE_BYTES]. The return value comes back through the XCom sidecar (``do_xcom_push``
+    defaults to ``True`` here), also with ``deferrable=True``. An inline manifest without ``platforms`` is solved for
+    [`DEFAULT_POD_PLATFORMS`][DEFAULT_POD_PLATFORMS], in the pod on each run; mount a volume at ``env_cache_path`` to
+    reuse it. An exception raised by the callable fails the task with
+    [`PixiCallableError`][airflow.providers.pixi.exceptions.PixiCallableError].
     """
 
     template_fields: Sequence[str] = tuple(
@@ -108,7 +110,7 @@ class PixiKubernetesPodOperator(BasePixiPythonOperator, KubernetesPodOperator):
         super().__init__(image=image, do_xcom_push=do_xcom_push, **kwargs)
 
     def default_platforms(self) -> list[str]:
-        """Return :data:`DEFAULT_POD_PLATFORMS`: the pod runs on a Linux node, not on the worker's platform."""
+        """Return [`DEFAULT_POD_PLATFORMS`][DEFAULT_POD_PLATFORMS]: pods run on Linux nodes, not on the worker."""
         return list(DEFAULT_POD_PLATFORMS)
 
     def pod_script(self) -> str:
@@ -163,8 +165,8 @@ class PixiKubernetesPodOperator(BasePixiPythonOperator, KubernetesPodOperator):
         """Return the environment variables that carry the callable, its arguments and an inline manifest.
 
         :param context: the task context, of which the JSON-safe part reaches the callable.
-        :raises AirflowException: if the input or the manifest is longer than :data:`MAX_ENV_VALUE_BYTES`, so the
-            task fails before the pod is created.
+        :raises AirflowException: if the input or the manifest is longer than
+            [`MAX_ENV_VALUE_BYTES`][MAX_ENV_VALUE_BYTES], so the task fails before the pod is created.
         """
         env = {
             _INPUT_ENV: base64.b64encode(self.callable_input(context)).decode(),

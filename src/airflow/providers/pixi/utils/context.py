@@ -67,7 +67,7 @@ def _json_items(mapping: Mapping[Any, Any]) -> dict[str, Any]:
 
 
 def serializable_context(context: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Return the context values of :data:`CONTEXT_KEYS` that ``context`` has, as JSON values.
+    """Return the context values of [`CONTEXT_KEYS`][CONTEXT_KEYS] that ``context`` has, as JSON values.
 
     Dates and datetimes become ISO 8601 strings, ``params`` a plain dict and the DAG run's ``conf`` ``conf``.
     ``dag_id``, ``task_id``, ``map_index`` and ``try_number`` come from the task instance. A value JSON cannot

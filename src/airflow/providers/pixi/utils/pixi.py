@@ -70,7 +70,7 @@ def _cached_pixi_version(path: str, mtime_ns: int) -> Version:
 
 
 def resolve_pixi(pixi_binary: str) -> str:
-    """Return the path of ``pixi_binary``; fail if it is missing or older than :data:`MIN_PIXI_VERSION`.
+    """Return the path of ``pixi_binary``; fail if it is missing or older than [`MIN_PIXI_VERSION`][MIN_PIXI_VERSION].
 
     Pixi is never installed by the provider: it has to be part of the worker's environment.
     """

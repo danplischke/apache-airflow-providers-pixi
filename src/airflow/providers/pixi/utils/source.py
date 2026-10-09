@@ -10,7 +10,7 @@ from importlib.resources import files
 from typing import Any
 
 RUNNER_SCRIPT = files("airflow.providers.pixi.runtime").joinpath("runner.py").read_text(encoding="utf-8")
-"""Source of :mod:`airflow.providers.pixi.runtime.runner`, which the operators run with ``python -c``."""
+"""Source of [`runner`][airflow.providers.pixi.runtime.runner], which the operators run with ``python -c``."""
 
 STRIPPED_DECORATORS = {"setup", "teardown", "task.skip_if", "task.run_if", "task.pixi", "pixi_task"}
 

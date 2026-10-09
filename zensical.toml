@@ -162,6 +162,8 @@ show_signature_annotations = true
 show_source = true
 show_symbol_type_heading = true
 show_symbol_type_toc = true
+relative_crossrefs = true
+scoped_crossrefs = true
 signature_crossrefs = true
 
 [project.markdown_extensions]
