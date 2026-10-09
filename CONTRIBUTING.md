@@ -85,8 +85,8 @@ breaks `import airflow` for everyone who has the package installed, which is wha
 
 Maintainers release from `main`:
 
-1. `just bump <version>` adds the version to `provider.yaml` and checks that it's the newest heading
-   in the changelog. Merge that change.
+1. Make `## <version>` the first section of the changelog, then run `just bump <version>`. It adds the
+   version to `provider.yaml` and refuses a version lower than the newest one there. Merge that change.
 2. `just release <version>` tags `v<version>` and pushes the tag. The release workflow runs QA, builds
    the package, publishes it to PyPI and creates the GitHub release.
 
