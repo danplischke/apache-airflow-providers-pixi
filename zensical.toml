@@ -61,7 +61,6 @@ features = [
   "navigation.footer",
   "navigation.instant",
   "navigation.instant.prefetch",
-  "navigation.path",
   "navigation.sections",
   "navigation.top",
   "navigation.tracking",
