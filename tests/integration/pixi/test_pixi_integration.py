@@ -20,12 +20,12 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from airflow.sdk import dag, task
-from airflow.sdk.exceptions import AirflowTaskTimeout
 from airflow.sdk.execution_time.timeout import timeout
 
 from airflow.providers.pixi.operators.bash import PixiBashOperator
 from airflow.providers.pixi.operators.pixi import PixiOperator
 from airflow.providers.pixi.sensors.pixi import PixiSensor
+from airflow.providers.pixi.utils.compat import AirflowTaskTimeout
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("PIXI_INTEGRATION_TEST") != "1",
@@ -120,7 +120,6 @@ def package_info():
 
 
 def test_requirements_alone_get_the_workers_python() -> None:
-    # pixi installs PyPI packages only with a conda python; the operator adds the worker's
     op = PixiOperator(
         task_id="t",
         requirements=["six==1.16.0"],

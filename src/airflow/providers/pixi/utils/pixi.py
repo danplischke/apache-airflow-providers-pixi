@@ -1,20 +1,50 @@
-"""The pixi binary on the worker: where it is and whether it is new enough. Pixi is never installed here."""
+"""The pixi binary on the worker: where it is, whether it is new enough, and the platform it installs for.
+
+Pixi is never installed here.
+"""
 
 from __future__ import annotations
 
 import functools
 import os
+import platform
 import re
 import shutil
 import subprocess
+import sys
 
-from airflow.exceptions import AirflowException
 from packaging.version import InvalidVersion, Version
+
+from airflow.providers.pixi.utils.compat import AirflowException
 
 MIN_PIXI_VERSION = Version("0.81.0")
 """Oldest pixi this provider supports. The integration and system tests run against it."""
 
 _PIXI_VERSION_OUTPUT = re.compile(r"\b(\d+\.\d+\.\d+\S*)")
+
+_PIXI_PLATFORMS = {
+    ("linux", "x86_64"): "linux-64",
+    ("linux", "amd64"): "linux-64",
+    ("linux", "aarch64"): "linux-aarch64",
+    ("linux", "arm64"): "linux-aarch64",
+    ("darwin", "x86_64"): "osx-64",
+    ("darwin", "arm64"): "osx-arm64",
+    ("win32", "amd64"): "win-64",
+    ("win32", "x86_64"): "win-64",
+}
+
+
+def local_platform() -> str:
+    """Return the pixi platform of this machine, such as ``linux-64`` or ``osx-arm64``."""
+    system = "linux" if sys.platform.startswith("linux") else sys.platform
+    machine = platform.machine()
+    try:
+        return _PIXI_PLATFORMS[system, machine.lower()]
+    except KeyError:
+        raise AirflowException(
+            f"No pixi platform is known for {sys.platform} on {machine or 'an unknown CPU'}; "
+            "pass platforms explicitly, for example platforms=['linux-64']"
+        ) from None
 
 
 def pixi_version(path: str) -> Version:
@@ -24,7 +54,6 @@ def pixi_version(path: str) -> Version:
 
 @functools.cache
 def _cached_pixi_version(path: str, mtime_ns: int) -> Version:
-    # mtime_ns is part of the key, so a binary replaced in place, e.g. by `pixi self-update`, is asked again
     try:
         proc = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=30, check=False)
     except (OSError, subprocess.TimeoutExpired) as e:

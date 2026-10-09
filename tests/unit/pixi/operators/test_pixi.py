@@ -6,6 +6,9 @@ import datetime
 import functools
 import inspect
 import os
+import pickle
+import signal
+import subprocess
 import sys
 import threading
 import time
@@ -13,18 +16,19 @@ from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
-from airflow.exceptions import AirflowException
 from airflow.sdk import DAG, dag, setup, task
-from airflow.sdk.exceptions import AirflowTaskTimeout
 from airflow.sdk.execution_time.timeout import timeout
 
-from airflow.providers.pixi.operators.pixi import PixiOperator
+from airflow.providers.pixi.exceptions import PixiCallableError
+from airflow.providers.pixi.operators.pixi import PixiOperator, _terminate
+from airflow.providers.pixi.utils.compat import AirflowException, AirflowSkipException, AirflowTaskTimeout
 from airflow.providers.pixi.utils.manifest import build_pixi_toml as _build_pixi_toml
 from airflow.providers.pixi.utils.manifest import (
     pypi_dependencies_from_requirements as _pypi_dependencies_from_requirements,
 )
-from airflow.providers.pixi.utils.pixi import MIN_PIXI_VERSION
+from airflow.providers.pixi.utils.pixi import MIN_PIXI_VERSION, local_platform
 from airflow.providers.pixi.utils.pixi import resolve_pixi as _resolve_pixi
+from airflow.providers.pixi.utils.source import ERROR_SUFFIX, RUNNER_SCRIPT
 from airflow.providers.pixi.utils.source import function_source as _function_source
 
 if sys.version_info >= (3, 11):
@@ -163,16 +167,101 @@ def test_output_is_streamed_to_the_task_log(fake_pixi) -> None:
     assert "to stderr" in logged
 
 
-def test_failure_raises_with_the_output_tail(fake_pixi) -> None:
+def test_an_exception_from_the_callable_names_it(fake_pixi) -> None:
     def boom():
         raise ValueError("kaputt")
 
     raise_line = inspect.getsourcelines(boom)[1] + 1
-    with pytest.raises(AirflowException, match="exited with code 1") as excinfo:
+    with (
+        patch.object(PixiOperator, "log", new_callable=PropertyMock) as log,
+        pytest.raises(PixiCallableError, match=r"^boom raised ValueError: kaputt$") as excinfo,
+    ):
         run(make(fake_pixi, python_callable=boom))
-    assert "ValueError: kaputt" in str(excinfo.value)
-    # the traceback points at the line in this file
-    assert f'File "{__file__}", line {raise_line}, in boom' in str(excinfo.value)
+    error = excinfo.value
+    assert isinstance(error, AirflowException)
+    assert (error.callable_name, error.error_type, error.error_message) == ("boom", "ValueError", "kaputt")
+    location = f'File "{__file__}", line {raise_line}, in boom'
+    assert location in error.traceback
+    logged = [c.args[1] for c in log.return_value.info.call_args_list if c.args[0] == "%s"]
+    assert any(location in line for line in logged)
+    assert "ValueError: kaputt" in logged
+
+
+def test_callable_error_survives_pickling() -> None:
+    error = pickle.loads(pickle.dumps(PixiCallableError("f", "KeyError", "'x'", "Traceback ...")))
+    assert str(error) == "f raised KeyError: 'x'"
+    assert error.traceback == "Traceback ..."
+
+
+def test_exception_types_outside_builtins_keep_their_module(fake_pixi) -> None:
+    def parse():
+        import json
+
+        class Unreadable(Exception):
+            pass
+
+        try:
+            json.loads("{")
+        except json.JSONDecodeError as e:
+            raise Unreadable("no JSON") from e
+
+    with pytest.raises(PixiCallableError, match="parse raised Unreadable: no JSON"):
+        run(make(fake_pixi, python_callable=parse))
+    with pytest.raises(PixiCallableError, match=r"json:loads raised json\.decoder\.JSONDecodeError: Expecting"):
+        run(make(fake_pixi, python_callable="json:loads", op_args=["{"]))
+
+
+def test_a_module_path_that_does_not_import_names_the_error(fake_pixi) -> None:
+    with pytest.raises(PixiCallableError, match="no_such_module:f raised ModuleNotFoundError: No module named"):
+        run(make(fake_pixi, python_callable="no_such_module:f"))
+
+
+def test_pickle_serializer_reports_exceptions_too(fake_pixi) -> None:
+    def boom():
+        raise RuntimeError("pickled")
+
+    with pytest.raises(PixiCallableError, match="boom raised RuntimeError: pickled"):
+        run(make(fake_pixi, python_callable=boom, serializer="pickle"))
+
+
+def test_pixi_failing_before_the_callable_runs_reports_its_exit_code_and_output(fake_pixi) -> None:
+    op = make(fake_pixi, python_callable="json:dumps", op_args=[1], env_vars={"FAKE_PIXI_FAIL": "1"})
+    with pytest.raises(AirflowException, match="pixi run exited with code 1:\nError: failed to solve") as excinfo:
+        run(op)
+    assert not isinstance(excinfo.value, PixiCallableError)
+
+
+def test_runner_writes_the_error_file_the_operator_reads() -> None:
+    assert f'output_path + "{ERROR_SUFFIX}"' in RUNNER_SCRIPT
+
+
+def leave_with(code):
+    import sys
+
+    sys.exit(code)
+
+
+@pytest.mark.parametrize(("skip_on_exit_code", "code"), [(99, 99), ([99, 100], 100), ({0}, 0)])
+def test_skip_on_exit_code_skips_the_task(fake_pixi, skip_on_exit_code, code: int) -> None:
+    op = make(
+        fake_pixi, python_callable=leave_with if code else add, op_args=[code], skip_on_exit_code=skip_on_exit_code
+    )
+    with pytest.raises(AirflowSkipException, match=f"exited with code {code}"):
+        run(op)
+
+
+def test_other_exit_codes_still_fail(fake_pixi) -> None:
+    with pytest.raises(AirflowException, match="exited with code 3") as excinfo:
+        run(make(fake_pixi, python_callable=leave_with, op_args=[3], skip_on_exit_code=[99]))
+    assert not isinstance(excinfo.value, AirflowSkipException)
+
+
+def test_skip_on_exit_code_applies_to_pixis_own_exit_code(fake_pixi) -> None:
+    op = make(
+        fake_pixi, python_callable="json:dumps", op_args=[1], env_vars={"FAKE_PIXI_FAIL": "2"}, skip_on_exit_code=2
+    )
+    with pytest.raises(AirflowSkipException):
+        run(op)
 
 
 def test_callable_exiting_early_fails(fake_pixi) -> None:
@@ -253,8 +342,10 @@ def test_environment_is_passed(fake_pixi) -> None:
     assert fake_pixi.calls[-1]["argv"][3:5] == ["--environment", "cuda"]
 
 
-def test_cache_dir_variables_are_set_in_the_environment(fake_pixi) -> None:
-    values = {"pixi_cache": "/shared/pixi", "uv_cache": "/shared/uv", "pip_cache": " /shared/pip\n"}
+def test_cache_dir_variables_are_set_in_the_environment(fake_pixi, monkeypatch) -> None:
+    monkeypatch.setenv("AIRFLOW_VAR_PIXI_CACHE", "/shared/pixi")
+    monkeypatch.setenv("AIRFLOW_VAR_UV_CACHE", "/shared/uv")
+    monkeypatch.setenv("AIRFLOW_VAR_PIP_CACHE", " /shared/pip\n")
     op = make(
         fake_pixi,
         python_callable="json:dumps",
@@ -263,8 +354,7 @@ def test_cache_dir_variables_are_set_in_the_environment(fake_pixi) -> None:
         uv_cache_dir_variable="uv_cache",
         pip_cache_dir_variable="pip_cache",
     )
-    with patch("airflow.providers.pixi.operators.pixi.Variable.get", side_effect=lambda key, default=None: values[key]):
-        run(op)
+    run(op)
     env = fake_pixi.calls[-1]["env"]
     assert env["PIXI_CACHE_DIR"] == "/shared/pixi"
     assert env["UV_CACHE_DIR"] == "/shared/uv"
@@ -318,10 +408,88 @@ def test_on_kill_stops_the_run(fake_pixi, tmp_path: Path) -> None:
 def test_execution_timeout_stops_the_run(fake_pixi, tmp_path: Path) -> None:
     beat = tmp_path / "beat"
     op = make(fake_pixi, python_callable=heartbeat, op_args=[str(beat)])
+
+    def expire_once_beating():
+        deadline = time.monotonic() + 30
+        while not beat.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        signal.setitimer(signal.ITIMER_REAL, 0.5)
+
     started = time.monotonic()
-    with pytest.raises(AirflowTaskTimeout), timeout(3):
+    with pytest.raises(AirflowTaskTimeout), timeout(60):
+        threading.Thread(target=expire_once_beating, daemon=True).start()
         run(op)
     assert_stopped(beat, started)
+
+
+def start_background_heartbeat(path):
+    import os
+    import subprocess
+    import sys
+    import time
+
+    code = (
+        "import time\n"
+        "end = time.monotonic() + 30\n"
+        "while time.monotonic() < end:\n"
+        f"    with open({path!r}, 'a') as f: f.write('.')\n"
+        "    time.sleep(0.05)\n"
+    )
+    subprocess.Popen([sys.executable, "-c", code])
+    deadline = time.monotonic() + 30
+    while not os.path.exists(path) and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+
+def test_execution_timeout_stops_what_an_exited_pixi_left_behind(fake_pixi, tmp_path: Path) -> None:
+    beat = tmp_path / "beat"
+    op = make(fake_pixi, python_callable=start_background_heartbeat, op_args=[str(beat)])
+
+    def expire_once_pixi_exited():
+        deadline = time.monotonic() + 30
+        while not beat.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        while (proc := op._process) is not None and proc.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        signal.setitimer(signal.ITIMER_REAL, 0.5)
+
+    started = time.monotonic()
+    with pytest.raises(AirflowTaskTimeout), timeout(60):
+        threading.Thread(target=expire_once_pixi_exited, daemon=True).start()
+        run(op)
+    assert_stopped(beat, started)
+
+
+def test_stopping_an_exited_pixi_still_stops_its_group(tmp_path: Path) -> None:
+    pidfile = tmp_path / "pid"
+    leave_child = (
+        "import subprocess, sys\n"
+        "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        f"open({str(pidfile)!r}, 'w').write(str(p.pid))\n"
+    )
+    proc = subprocess.Popen([sys.executable, "-c", leave_child], start_new_session=True)
+    proc.wait()
+    child = int(pidfile.read_text())
+    _terminate(proc)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    os.kill(child, signal.SIGKILL)
+    pytest.fail("the process the exited pixi left behind is still running")
+
+
+@pytest.mark.parametrize("error", [ProcessLookupError, PermissionError])
+def test_stopping_a_group_that_already_exited_still_reaps_pixi(error: type[OSError]) -> None:
+    proc = MagicMock()
+    proc.poll.return_value = None
+    with patch("airflow.providers.pixi.operators.pixi.os.killpg", side_effect=error) as killpg:
+        _terminate(proc)
+    assert [c.args[1] for c in killpg.call_args_list] == [signal.SIGTERM, signal.SIGKILL]
+    assert proc.wait.call_args_list[-1] == ((), {})
 
 
 def test_build_pixi_toml_minimal() -> None:
@@ -544,3 +712,163 @@ def test_unreadable_pixi_version_fails(tmp_path: Path) -> None:
 def test_ci_tests_against_the_minimum_pixi() -> None:
     workflow = (Path(__file__).parents[4] / ".github" / "workflows" / "qa.yml").read_text()
     assert f"PIXI_VERSION: v{MIN_PIXI_VERSION}" in workflow
+
+
+@pytest.mark.parametrize("lock_mode", ["locked", "frozen"])
+def test_lock_mode_is_passed_after_the_manifest(fake_pixi, tmp_path: Path, lock_mode: str) -> None:
+    op = make(
+        fake_pixi,
+        pixi_project_path=str(tmp_path),
+        environment="test",
+        lock_mode=lock_mode,
+        python_callable="json:dumps",
+        op_args=[1],
+    )
+    assert run(op) == "1"
+    argv = fake_pixi.calls[-1]["argv"]
+    assert argv[:6] == ["run", "--manifest-path", str(tmp_path), "--environment", "test", f"--{lock_mode}"]
+    assert op.pixi_run_options() == ["--environment", "test", f"--{lock_mode}"]
+
+
+def test_no_lock_mode_runs_plain_pixi_run(fake_pixi, tmp_path: Path) -> None:
+    (tmp_path / "pixi.toml").touch()
+    run(make(fake_pixi, pixi_toml_path=str(tmp_path / "pixi.toml"), python_callable="json:dumps", op_args=[1]))
+    assert fake_pixi.calls[-1]["argv"][3] == "python"
+
+
+def test_unknown_lock_mode_is_rejected_when_the_dag_is_parsed(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="lock_mode must be one of 'locked', 'frozen' or None, not 'strict'"):
+        PixiOperator(task_id="t", python_callable=add, pixi_project_path=str(tmp_path), lock_mode="strict")
+
+
+def test_lock_mode_is_rejected_for_an_inline_manifest() -> None:
+    with pytest.raises(ValueError, match="needs a pixi.lock, which an inline manifest does not have"):
+        PixiOperator(task_id="t", python_callable=add, lock_mode="locked", **INLINE)
+
+
+def test_templated_lock_mode_is_checked_when_rendered(fake_pixi, tmp_path: Path) -> None:
+    op = make(
+        fake_pixi, pixi_project_path=str(tmp_path), python_callable=add, op_args=[1], lock_mode="{{ params.lock }}"
+    )
+    assert "lock_mode" in op.template_fields
+    op.render_template_fields({"params": {"lock": "frozen"}})
+    run(op)
+    assert fake_pixi.calls[-1]["argv"][3] == "--frozen"
+
+    op = make(
+        fake_pixi, pixi_project_path=str(tmp_path), python_callable=add, op_args=[1], lock_mode="{{ params.lock }}"
+    )
+    op.render_template_fields({"params": {"lock": ""}})
+    run(op)
+    assert fake_pixi.calls[-1]["argv"][3] == "python"
+
+    op = make(
+        fake_pixi, pixi_project_path=str(tmp_path), python_callable=add, op_args=[1], lock_mode="{{ params.lock }}"
+    )
+    op.render_template_fields({"params": {"lock": "yes"}})
+    with pytest.raises(AirflowException, match="lock_mode must be one of"):
+        run(op)
+
+
+def test_templated_lock_mode_of_an_inline_manifest_fails_before_running_pixi(fake_pixi) -> None:
+    op = make(fake_pixi, python_callable=add, op_args=[1], lock_mode="{{ params.lock }}")
+    op.render_template_fields({"params": {"lock": "locked"}})
+    with pytest.raises(AirflowException, match="inline manifest"):
+        run(op)
+    assert fake_pixi.calls == []
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "expected"),
+    [
+        ("linux", "x86_64", "linux-64"),
+        ("linux", "aarch64", "linux-aarch64"),
+        ("linux", "arm64", "linux-aarch64"),
+        ("darwin", "x86_64", "osx-64"),
+        ("darwin", "arm64", "osx-arm64"),
+        ("win32", "AMD64", "win-64"),
+    ],
+)
+def test_local_platform_maps_to_pixi_names(monkeypatch, system: str, machine: str, expected: str) -> None:
+    monkeypatch.setattr(sys, "platform", system)
+    monkeypatch.setattr("platform.machine", lambda: machine)
+    assert local_platform() == expected
+
+
+def test_unknown_local_platform_asks_for_explicit_platforms(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr("platform.machine", lambda: "riscv64")
+    with pytest.raises(AirflowException, match="No pixi platform is known for linux on riscv64; pass platforms"):
+        local_platform()
+
+
+def test_inline_manifest_defaults_to_the_platform_running_pixi(fake_pixi) -> None:
+    run(make(fake_pixi, python_callable="json:dumps", op_args=[1], cleanup_temp_manifest=False))
+    assert parse_toml(Path(fake_pixi.calls[-1]["argv"][2]).read_text())["workspace"]["platforms"] == [local_platform()]
+
+
+def test_explicit_platforms_win(fake_pixi) -> None:
+    op = make(fake_pixi, platforms=["linux-64", "win-64"])
+    with patch("airflow.providers.pixi.operators.pixi.local_platform", side_effect=AssertionError("not asked")):
+        assert parse_toml(op.inline_manifest_toml())["workspace"]["platforms"] == ["linux-64", "win-64"]
+
+
+def test_default_platforms_can_be_overridden(fake_pixi) -> None:
+    class Remote(PixiOperator):
+        def default_platforms(self) -> list[str]:
+            return ["linux-64", "linux-aarch64"]
+
+    op = Remote(task_id="t", python_callable=add, **INLINE)
+    assert parse_toml(op.inline_manifest_toml())["workspace"]["platforms"] == ["linux-64", "linux-aarch64"]
+
+
+def dag_in(directory: Path, **kwargs) -> DAG:
+    dag = DAG("d", **kwargs)
+    dag.fileloc = str(directory / "my_dag.py")
+    return dag
+
+
+@pytest.mark.parametrize("argument", ["pixi_project_path", "pixi_toml_path"])
+def test_relative_paths_are_relative_to_the_dag_file(fake_pixi, tmp_path: Path, monkeypatch, argument: str) -> None:
+    dags = tmp_path / "dags"
+    (dags / "project").mkdir(parents=True)
+    (dags / "project" / "pixi.toml").touch()
+    monkeypatch.chdir(tmp_path)
+    path = "project" if argument == "pixi_project_path" else "project/pixi.toml"
+    with dag_in(dags):
+        op = make(fake_pixi, python_callable="json:dumps", op_args=[1], **{argument: path})
+    run(op)
+    call = fake_pixi.calls[-1]
+    assert call["argv"][2] == str(dags / path)
+    assert os.path.realpath(call["cwd"]) == os.path.realpath(dags / "project")
+
+
+def test_relative_env_cache_path_is_relative_to_the_dag_file(fake_pixi, tmp_path: Path, monkeypatch) -> None:
+    dags = tmp_path / "dags"
+    dags.mkdir()
+    monkeypatch.chdir(tmp_path)
+    with dag_in(dags):
+        op = make(fake_pixi, python_callable="json:dumps", op_args=[1], env_cache_path="envs")
+    run(op)
+    assert Path(fake_pixi.calls[-1]["argv"][2]).parent.parent == dags / "envs"
+
+
+def test_templated_relative_path_is_resolved_after_rendering(fake_pixi, tmp_path: Path) -> None:
+    (tmp_path / "project").mkdir()
+    with dag_in(tmp_path):
+        op = make(fake_pixi, pixi_project_path="{{ params.project }}", python_callable="json:dumps", op_args=[1])
+    op.render_template_fields({"params": {"project": "project"}})
+    run(op)
+    assert fake_pixi.calls[-1]["argv"][2] == str(tmp_path / "project")
+
+
+def test_absolute_paths_and_tasks_without_a_dag_are_unchanged(fake_pixi, tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "project").mkdir()
+    with dag_in(tmp_path / "elsewhere"):
+        op = make(fake_pixi, pixi_project_path=str(tmp_path / "project"), python_callable="json:dumps", op_args=[1])
+    run(op)
+    assert fake_pixi.calls[-1]["argv"][2] == str(tmp_path / "project")
+
+    monkeypatch.chdir(tmp_path)
+    run(make(fake_pixi, pixi_project_path="project", python_callable="json:dumps", op_args=[1]))
+    assert os.path.realpath(fake_pixi.calls[-1]["argv"][2]) == os.path.realpath(tmp_path / "project")

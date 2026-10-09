@@ -8,12 +8,34 @@ import textwrap
 from collections.abc import Callable, Collection
 from typing import Any
 
-# Runs inside the Pixi environment as `python -c RUNNER_SCRIPT <serializer> <input> <output> [json]`. The input
-# file holds the callable (a module path or a function's source) and its arguments; the return value goes
-# to the output file, which keeps stdout and stderr free for the task log. With "json", a pickled result is
-# written as a base64 JSON string, for a pod's XCom file. Must run on old Pythons too.
 RUNNER_SCRIPT = """
 import importlib, json, pickle, sys
+
+
+def with_context(fn, args, kwargs, context):
+    import inspect
+
+    try:
+        signature = inspect.signature(fn)
+        bound = signature.bind_partial(*args, **kwargs).arguments
+    except (TypeError, ValueError):
+        return kwargs
+    taken = set(bound)
+    names = []
+    for name, parameter in signature.parameters.items():
+        if parameter.kind == parameter.VAR_KEYWORD:
+            taken.discard(name)
+            taken.update(bound.get(name, ()))
+            names = list(context)
+            break
+        if parameter.kind in (parameter.POSITIONAL_OR_KEYWORD, parameter.KEYWORD_ONLY):
+            names.append(name)
+    extra = dict((name, context[name]) for name in names if name in context and name not in taken)
+    if not extra:
+        return kwargs
+    extra.update(kwargs)
+    return extra
+
 
 serializer, input_path, output_path = sys.argv[1:4]
 if serializer == "pickle":
@@ -22,34 +44,53 @@ if serializer == "pickle":
 else:
     with open(input_path) as f:
         spec = json.load(f)
-if "source" in spec:
-    namespace = {"__name__": "__pixi_airflow_task__"}
-    exec(compile(spec["source"], spec["filename"], "exec"), namespace)
-    fn = namespace[spec["name"]]
-else:
-    fn = getattr(importlib.import_module(spec["module"]), spec["name"])
-result = fn(*spec["args"], **spec["kwargs"])
-if serializer == "pickle" and sys.argv[4:] == ["json"]:
-    import base64
+try:
+    if "source" in spec:
+        namespace = {"__name__": "__pixi_airflow_task__"}
+        exec(compile(spec["source"], spec["filename"], "exec"), namespace)
+        fn = namespace[spec["name"]]
+    else:
+        fn = getattr(importlib.import_module(spec["module"]), spec["name"])
+    kwargs = spec["kwargs"]
+    if spec.get("context"):
+        kwargs = with_context(fn, spec["args"], kwargs, spec["context"])
+    result = fn(*spec["args"], **kwargs)
+    if serializer == "pickle" and sys.argv[4:] == ["json"]:
+        import base64
 
-    with open(output_path, "w") as f:
-        json.dump(base64.b64encode(pickle.dumps(result, protocol=4)).decode(), f)
-elif serializer == "pickle":
-    with open(output_path, "wb") as f:
-        pickle.dump(result, f, protocol=4)
-else:
+        data = json.dumps(base64.b64encode(pickle.dumps(result, protocol=4)).decode())
+    elif serializer == "pickle":
+        data = pickle.dumps(result, protocol=4)
+    else:
+        try:
+            data = json.dumps(result)
+        except TypeError as e:
+            raise TypeError(str(e) + "; return a JSON-serializable value or pass serializer='pickle'") from None
+except Exception as e:
+    import traceback
+
+    text = traceback.format_exc()
+    sys.stderr.write(text)
+    cls = type(e)
+    name = cls.__name__ if "<locals>" in cls.__qualname__ else cls.__qualname__
+    if cls.__module__ not in ("builtins", "__main__", "__pixi_airflow_task__"):
+        name = cls.__module__ + "." + name
     try:
-        data = json.dumps(result)
-    except TypeError as e:
-        raise TypeError(str(e) + "; return a JSON-serializable value or pass serializer='pickle'") from None
-    with open(output_path, "w") as f:
-        f.write(data)
+        message = str(e)
+    except Exception:
+        message = "<str() of the exception failed>"
+    with open(output_path + ".error", "w") as f:
+        json.dump({"type": name, "message": message, "traceback": text}, f)
+    sys.exit(1)
+with open(output_path, "wb" if isinstance(data, bytes) else "w") as f:
+    f.write(data)
 """
 
-# Decorators Airflow strips when it ships a function's source (as @task.virtualenv does), plus ours.
+ERROR_SUFFIX = ".error"
+"""Appended to the runner's output path for the file describing an exception from the callable."""
+
 STRIPPED_DECORATORS = {"setup", "teardown", "task.skip_if", "task.run_if", "task.pixi", "pixi_task"}
 
-# pickle protocol readable by every Python 3.4+, since the environment may run an older Python
 PICKLE_PROTOCOL = 4
 
 

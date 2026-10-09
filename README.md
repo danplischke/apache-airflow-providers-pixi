@@ -1,8 +1,10 @@
 # apache-airflow-providers-pixi
 
-Apache Airflow 3 provider to run Python callables, Bash commands and sensor checks inside
-[Pixi](https://pixi.sh)-managed environments, on the worker or in a Kubernetes pod: `PixiOperator`,
-`PixiBashOperator`, `PixiKubernetesPodOperator` and `PixiSensor`, each with a TaskFlow decorator.
+Apache Airflow 3 provider to run Python callables, Bash commands, manifest tasks, branch choices and
+sensor checks inside [Pixi](https://pixi.sh)-managed environments, on the worker or in a Kubernetes pod:
+`PixiOperator`, `PixiBashOperator`, `PixiTaskOperator`, `PixiKubernetesPodOperator`,
+`PixiBranchOperator`, `PixiShortCircuitOperator` and `PixiSensor`, and a `pixi` connection type for
+private channels and indexes.
 
 **Documentation:** https://danplischke.github.io/apache-airflow-providers-pixi/
 (for LLMs and coding agents: [llms.txt](https://danplischke.github.io/apache-airflow-providers-pixi/llms.txt),
@@ -15,10 +17,12 @@ pip install apache-airflow-providers-pixi
 pip install "apache-airflow-providers-pixi[cncf.kubernetes]"  # adds PixiKubernetesPodOperator
 ```
 
-Requires `apache-airflow>=3.0`, and [Pixi](https://pixi.sh/latest/installation/) 0.81.0 or
-newer installed on the workers, for example in the worker image. The provider never installs
-pixi itself: a task fails if `pixi` is not on `PATH` (or at `pixi_binary`) or is older than
-0.81.0.
+Requires Apache Airflow 3.1.2 or newer (`apache-airflow>=3.1.2`; Airflow 3.0 is not supported),
+and [Pixi](https://pixi.sh/latest/installation/) 0.81.0 or newer installed on the workers, for
+example in the worker image (see the
+[deployment guide](https://danplischke.github.io/apache-airflow-providers-pixi/deployment/)). The
+provider never installs pixi itself: a task fails if `pixi` is not on `PATH` (or at `pixi_binary`)
+or is older than 0.81.0. Airflow's constraints files can be used for every supported Airflow release.
 
 ## Usage
 
@@ -28,13 +32,15 @@ from airflow.sdk import DAG
 from airflow.providers.pixi import PixiOperator
 
 with DAG("my_pipeline") as dag:
-    # existing Pixi project: a directory with pixi.toml or pyproject.toml
+    # existing Pixi project: a directory with pixi.toml or pyproject.toml; a relative path is
+    # relative to the DAG file
     train = PixiOperator(
         task_id="train",
         pixi_project_path="/path/to/pixi/project",
         python_callable="mymodule:train",
         op_kwargs={"epochs": 3},
         environment="cuda",  # optional: one of the manifest's environments
+        lock_mode="locked",  # use pixi.lock as it is; fail if it is out of date
     )
 
     # explicit manifest file
@@ -51,7 +57,6 @@ with DAG("my_pipeline") as dag:
         dependencies={"python": ">=3.10", "numpy": "*"},
         pypi_dependencies={"pandas": ">=2.0"},
         channels=["conda-forge"],
-        platforms=["linux-64", "osx-arm64"],
         env_cache_path="/var/cache/pixi-airflow",
         python_callable="mymodule:report",
         op_args=[evaluate.output],  # upstream XCom, resolved at run time
@@ -77,7 +82,7 @@ def my_dag():
         return 3
 
     @task.pixi(pixi_project_path="/path/to/pixi/project", environment="cuda")
-    def train(epochs: int) -> float:
+    def train(epochs: int, ds=None) -> float:  # ds is filled from the Airflow context
         import torch  # imports go inside the function: it runs in the Pixi environment
 
         return torch.rand(epochs).mean().item()
@@ -97,7 +102,11 @@ How it works:
   return value cross into and out of the environment as JSON, or with `serializer="pickle"`
   for values JSON cannot hold (their types must be importable on both sides). A value that
   does not fit the serializer fails the task instead of being converted.
-- Everything the run prints, pixi's messages included, is streamed to the task log.
+- Parameters named after a context key (`ds`, `run_id`, `params`, `logical_date`, ...) are
+  filled from the Airflow context, as with `@task.virtualenv`; dates arrive as ISO strings.
+- Everything the run prints, pixi's messages included, is streamed to the task log. An
+  exception in the function fails the task with `PixiCallableError`, which names the function,
+  the exception and its message; `skip_on_exit_code` skips the task instead.
 - The return value is the task's XCom.
 
 ### Bash, Kubernetes and sensors
@@ -116,7 +125,7 @@ PixiBashOperator(
 )
 
 
-@task.pixi_kubernetes(image="ghcr.io/prefix-dev/pixi:0.81.0", requirements=["pandas"], namespace="jobs")
+@task.pixi_kubernetes(image="ghcr.io/prefix-dev/pixi:0.81.0", requirements=["pandas", "pyarrow"], namespace="jobs")
 def summarize(path: str) -> dict:
     import pandas as pd
 
@@ -136,25 +145,30 @@ def landed(path: str) -> bool:
 |---|---|
 | `PixiOperator` / `@task.pixi` | runs a Python callable in a Pixi environment on the worker |
 | `PixiBashOperator` / `@task.pixi_bash` | runs a Bash command with `pixi run ... bash -c`, like `BashOperator` |
+| `PixiTaskOperator` | runs a task from the manifest's `[tasks]` with `pixi run <task> [args]` |
 | `PixiKubernetesPodOperator` / `@task.pixi_kubernetes` | runs a Python callable in a Pixi environment in a Kubernetes pod (`[cncf.kubernetes]` extra) |
+| `PixiBranchOperator` / `@task.pixi_branch` | chooses the tasks to follow with a Python callable run in a Pixi environment, like `BranchPythonVirtualenvOperator` |
+| `PixiShortCircuitOperator` / `@task.pixi_short_circuit` | skips the tasks downstream when a Python callable, run in a Pixi environment, returns a falsy value, like `ShortCircuitOperator` |
 | `PixiSensor` / `@task.pixi_sensor` | waits for a Python callable, run in a Pixi environment, to return a truthy value |
 
 All of them choose the environment the same way (below). Templated fields: `op_args`,
-`op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `requirements` and the cache
-directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
+`op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `lock_mode`, `requirements` and
+the cache directory Variable names. `pixi_toml_path` must point at a `pixi.toml` or
 `pyproject.toml`; pixi uses exactly that file.
 
 ### Inline manifest options
 
-- **Workspace:** `channels` (default `["conda-forge"]`), `platforms` (default `linux-64`,
-  `osx-64`, `osx-arm64`, `win-64`), `workspace_name`
+- **Workspace:** `channels` (default `["conda-forge"]`), `platforms` (default: the platform of the
+  machine running pixi; `linux-64` and `linux-aarch64` in a pod), `workspace_name`
 - **Conda:** `dependencies` (dict, or list of MatchSpecs)
 - **PyPI:** `pypi_dependencies`, `requirements` (pip requirement strings, as for
   `@task.virtualenv`), `pypi_options`. With PyPI packages but no `python` dependency, the
   environment gets the worker's Python version.
 - **Multiple environments:** `environments` (dict), `feature` (dict of feature configs)
 
-Same structure as the [Pixi manifest](https://pixi.sh/dev/reference/pixi_manifest/).
+Same structure as the [Pixi manifest](https://pixi.sh/dev/reference/pixi_manifest/), and checked
+against its schema for pixi 0.81.0 when the DAG is parsed: a misspelled key raises `ValueError`
+naming it. Pass `validate_manifest=False` for keys only a newer pixi on the workers knows.
 
 By default an inline environment is built in a temporary directory for each run and removed
 afterwards (keep it for inspection with `cleanup_temp_manifest=False`). With
@@ -162,10 +176,16 @@ afterwards (keep it for inspection with `cleanup_temp_manifest=False`). With
 of the same manifest reuse it, like `venv_cache_path` of `PythonVirtualenvOperator`. Remove
 old directories there yourself; concurrent runs of one manifest are safe.
 
-### Environment variables
+### Environment variables and credentials
 
 The run inherits the worker's environment; `env_vars` adds to or overrides it. It is not
-templated, so secrets set there are never rendered into the UI.
+templated, so secrets set there are never rendered into the UI. `env_from_variables` and
+`env_from_connections` set variables from Airflow Variables and Connections when the task runs,
+for example `{"DB_PASSWORD": "warehouse.password"}`, and mask secret values in the logs.
+
+For private conda channels and PyPI indexes, create a connection of type `pixi` and pass its id
+as `pixi_conn_id`; see the
+[Pixi Connection](https://danplischke.github.io/apache-airflow-providers-pixi/connections/pixi/) page.
 
 ### Timeouts and killing
 
@@ -222,8 +242,9 @@ PIXI_E2E_TEST=1 pytest tests/system/pixi           # dag.test(): real task runne
 ### Local Airflow
 
 `just standalone` starts Airflow (`airflow standalone`, SQLite) at http://localhost:8080 without a
-login, with the DAGs in [dev/dags](dev/dags): every operator and decorator against the sample project
-in [dev/project](dev/project), and one for a local Kubernetes cluster. It keeps its state in
+login, with the DAGs in [dev/dags](dev/dags): every operator, sensor and decorator that runs on the worker,
+against the sample project in [dev/project](dev/project), and `@task.pixi_kubernetes` for a local
+Kubernetes cluster. It keeps its state in
 `.airflow/`; `just airflow-reset` deletes it, `just airflow <command>` runs the Airflow CLI against it
 (for example `just airflow dags test pixi_showcase`), and `AIRFLOW_PORT` changes the port. Pixi has to
 be installed (`brew install pixi`).
@@ -231,8 +252,11 @@ be installed (`brew install pixi`).
 ### Recipes
 
 With [just](https://just.systems), `just dev` sets everything up and `just` lists the recipes:
-`just test`, `just test-integration` and `just test-system` run the tiers above, `just check`
-runs what CI runs, and `just bump <version>` / `just release <version>` cut a release.
+`just test`, `just test-integration` and `just test-system` run the tiers above, `just test-k8s`
+runs the pod tests in the current kubectl context (for example a kind cluster), `just test-compat`
+and `just test-lowest` run the tests against each supported Airflow release with its
+constraints file and against the lowest allowed versions, `just check` runs what CI runs, and
+`just bump <version>` / `just release <version>` cut a release.
 
 ## License
 

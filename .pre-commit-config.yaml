@@ -3,6 +3,8 @@
 default_language_version:
   python: python3
 
+exclude: ^src/airflow/providers/pixi/utils/pixi_manifest\.schema\.json$
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -16,7 +18,6 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
 
-  # ruff from uv.lock, so hooks and CI never run different versions
   - repo: local
     hooks:
       - id: ruff-check

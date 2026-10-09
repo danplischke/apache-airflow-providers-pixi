@@ -457,6 +457,7 @@ source = { editable = "." }
 dependencies = [
     { name = "apache-airflow" },
     { name = "apache-airflow-providers-standard" },
+    { name = "jsonschema" },
     { name = "packaging" },
     { name = "tomlkit" },
 ]
@@ -482,9 +483,10 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "apache-airflow", specifier = ">=3.0" },
-    { name = "apache-airflow-providers-cncf-kubernetes", marker = "extra == 'cncf-kubernetes'" },
-    { name = "apache-airflow-providers-standard" },
+    { name = "apache-airflow", specifier = ">=3.1.2" },
+    { name = "apache-airflow-providers-cncf-kubernetes", marker = "extra == 'cncf-kubernetes'", specifier = ">=10.9.0" },
+    { name = "apache-airflow-providers-standard", specifier = ">=1.9.1" },
+    { name = "jsonschema", specifier = ">=4.19.1" },
     { name = "packaging", specifier = ">=22" },
     { name = "tomlkit", specifier = ">=0.12" },
 ]

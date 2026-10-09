@@ -17,7 +17,6 @@ class PixiDecoratedSensorOperator(PixiSensor):
     shallow_copy_attrs: Sequence[str] = ("python_callable",)
 
     def __init__(self, *, task_id: str, **kwargs: Any) -> None:
-        # as @task.sensor: a function used several times in a DAG gets task ids with a suffix
         kwargs["task_id"] = get_unique_task_id(task_id, kwargs.get("dag"), kwargs.get("task_group"))
         super().__init__(**kwargs)
 

@@ -19,6 +19,7 @@ def _decorated_operator_class() -> type:
         custom_operator_name = "@task.pixi_kubernetes"
         template_fields = PixiKubernetesPodOperator.template_fields
         template_fields_renderers = PixiKubernetesPodOperator.template_fields_renderers
+        get_python_source = PixiKubernetesPodOperator.get_python_source
 
         def __init__(
             self,
@@ -28,7 +29,6 @@ def _decorated_operator_class() -> type:
             op_kwargs: Mapping[str, Any] | None = None,
             **kwargs: Any,
         ) -> None:
-            # as for @task.pixi: PixiKubernetesPodOperator has to see the values DecoratedOperator keeps
             super().__init__(
                 kwargs_to_upstream={
                     "python_callable": python_callable,

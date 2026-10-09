@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from airflow.sdk.bases.sensor import BaseSensorOperator, PokeReturnValue
+from airflow.sdk import BaseSensorOperator, PokeReturnValue
 
 from airflow.providers.pixi.operators.pixi import BasePixiPythonOperator, PixiSubprocessMixin
 
@@ -34,7 +34,7 @@ class PixiSensor(PixiSubprocessMixin, BasePixiPythonOperator, BaseSensorOperator
             return super().execute(context)
 
     def poke(self, context: Any) -> PokeReturnValue:
-        result = self.run_callable()
+        result = self.run_callable(context)
         if isinstance(result, dict) and "is_done" in result and set(result) <= _POKE_RESULT_KEYS:
             return PokeReturnValue(bool(result["is_done"]), result.get("xcom_value"))
         return PokeReturnValue(bool(result))

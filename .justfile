@@ -56,6 +56,50 @@ test-system *args:
     uv run airflow db migrate > /dev/null
     PIXI_E2E_TEST=1 uv run pytest tests/system/pixi {{ args }}
 
+# Kubernetes system tests in the current kubectl context, e.g. after `kind create cluster`, as kubernetes.yml does
+[group('test')]
+test-k8s *args:
+    #!/usr/bin/env sh
+    set -eu
+    kubectl cluster-info > /dev/null 2>&1 || { echo "no Kubernetes cluster in the current kubectl context; try: kind create cluster"; exit 1; }
+    export AIRFLOW_HOME="{{ airflow_e2e_home }}" AIRFLOW__CORE__LOAD_EXAMPLES=False
+    export AIRFLOW__CORE__DAGS_FOLDER="$PWD/tests/system/pixi"
+    uv run airflow db migrate > /dev/null
+    PIXI_K8S_E2E_TEST=1 uv run pytest tests/system/pixi/test_example_kubernetes.py {{ args }}
+
+# Tests against Airflow releases with their official constraints, as the compat job does, e.g. `just test-compat 3.1.8`; default: the versions in qa.yml
+[group('test')]
+test-compat *versions:
+    #!/usr/bin/env sh
+    set -eu
+    versions="{{ versions }}"
+    [ -n "$versions" ] || versions=$(sed -n 's/^ *airflow-version: \[\(.*\)\]/\1/p' .github/workflows/qa.yml | tr -d '",')
+    for v in $versions; do
+        venv="$PWD/.cache/compat/$v"
+        echo "== Airflow $v in $venv"
+        uv venv --quiet --allow-existing --python 3.12 "$venv"
+        export VIRTUAL_ENV="$venv"
+        uv pip install --quiet "apache-airflow==$v" apache-airflow-providers-standard \
+            apache-airflow-providers-cncf-kubernetes apache-airflow-providers-common-compat \
+            pytest pyyaml jsonschema tomlkit "packaging>=22" \
+            -c "https://raw.githubusercontent.com/apache/airflow/constraints-$v/constraints-3.12.txt"
+        uv pip install --quiet --no-deps -e .
+        uv pip check
+        "$venv/bin/python" -m pytest tests -q
+    done
+
+# Unit tests with every direct dependency at its lowest allowed version on Python 3.10, as the lowest-direct job does
+[group('test')]
+test-lowest *args:
+    #!/usr/bin/env sh
+    set -eu
+    copy="$PWD/.cache/lowest"
+    mkdir -p "$copy"
+    rsync -a --delete --exclude .git --exclude .venv --exclude .cache --exclude .pixi --exclude .airflow --exclude site ./ "$copy/"
+    cd "$copy"
+    uv sync --quiet --resolution lowest-direct --group dev --python 3.10
+    uv run --no-sync pytest tests/unit -q {{ args }}
+
 [group('test')]
 test-all: test test-integration test-system
 
@@ -78,10 +122,10 @@ build:
     uv build
     uvx 'twine>=7.0.0' check dist/*
 
-# Import the package without the dev dependencies; a broken provider info breaks `import airflow`
+# Import the package without the dev dependencies or the cncf.kubernetes extra; a broken provider info breaks `import airflow`
 [group('package')]
 smoke:
-    uv run --isolated --no-default-groups python -c "import airflow.providers.pixi; from airflow.providers.pixi.get_provider_info import get_provider_info; get_provider_info(); from airflow.sdk import task; assert hasattr(task, 'pixi'); print('smoke test OK')"
+    uv run --isolated --no-default-groups python dev/smoke.py
 
 [group('package')]
 lock:
@@ -120,7 +164,6 @@ bump ver:
 
     sub("pyproject.toml", r'^version = ".*"$', f'version = "{ver}"')
     sub("src/airflow/providers/pixi/__init__.py", r'^__version__ = ".*"$', f'__version__ = "{ver}"')
-    # provider.yaml lists every release, newest first
     if f"  - {ver}\n" not in Path("provider.yaml").read_text():
         sub("provider.yaml", r"^versions:\n", f"versions:\n  - {ver}\n")
     if f"## {ver}" not in Path("docs/changelog.md").read_text():
@@ -160,6 +203,18 @@ airflow *args:
 [group('airflow')]
 airflow-reset:
     rm -rf .airflow
+
+# Vendor pixi's manifest schema for MIN_PIXI_VERSION in utils/pixi.py; run it after bumping that version
+[group('maintenance')]
+pixi-schema:
+    #!/usr/bin/env sh
+    set -eu
+    ver=$(sed -n 's/^MIN_PIXI_VERSION = Version("\(.*\)")$/\1/p' src/airflow/providers/pixi/utils/pixi.py)
+    [ -n "$ver" ] || { echo "no MIN_PIXI_VERSION in src/airflow/providers/pixi/utils/pixi.py"; exit 1; }
+    schema=src/airflow/providers/pixi/utils/pixi_manifest.schema.json
+    curl -fsSL "https://pixi.sh/v$ver/schema/manifest/schema.json" -o "$schema.tmp"
+    mv "$schema.tmp" "$schema"
+    echo "vendored the manifest schema of pixi $ver; check the diff and run just test"
 
 [group('maintenance')]
 clean:

@@ -5,11 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any, ClassVar
 
-from airflow.sdk.bases.decorator import DecoratedOperator, determine_kwargs, task_decorator_factory
-from airflow.sdk.definitions._internal.types import SET_DURING_EXECUTION
-from airflow.sdk.definitions.context import context_merge
+from airflow.sdk.bases.decorator import DecoratedOperator, task_decorator_factory
 
 from airflow.providers.pixi.operators.bash import PixiBashOperator
+from airflow.providers.pixi.utils.compat import SET_DURING_EXECUTION, context_merge, determine_kwargs
 
 
 class PixiBashDecoratedOperator(DecoratedOperator, PixiBashOperator):
@@ -40,7 +39,6 @@ class PixiBashDecoratedOperator(DecoratedOperator, PixiBashOperator):
         )
 
     def execute(self, context: Any) -> Any:
-        # as @task.bash: call the function on the worker, render the command it returns, then run that
         context_merge(context, self.op_kwargs)
         kwargs = determine_kwargs(self.python_callable, self.op_args, context)
         self.bash_command = self.python_callable(*self.op_args, **kwargs)

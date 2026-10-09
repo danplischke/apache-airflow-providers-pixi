@@ -33,13 +33,15 @@ otherwise.
 
 === "Project directory"
 
-    `pixi_project_path` is a directory with a `pixi.toml` or `pyproject.toml`. The project's
-    `pixi.lock` is honoured, which makes this the most reproducible option.
+    `pixi_project_path` is a directory with a `pixi.toml` or `pyproject.toml`. With
+    `lock_mode="locked"` or `"frozen"`, the environment is installed from the project's `pixi.lock`,
+    which makes this the most reproducible option; see [The lock file](#the-lock-file).
 
     ```python
     PixiOperator(
         task_id="train",
         pixi_project_path="/path/to/pixi/project",
+        lock_mode="locked",
         python_callable="mymodule:train",
         op_kwargs={"epochs": 3},
         environment="cuda",
@@ -54,6 +56,7 @@ otherwise.
     PixiOperator(
         task_id="evaluate",
         pixi_toml_path="/repo/pixi.toml",
+        lock_mode="locked",
         environment="test",
         python_callable="mymodule:evaluate",
     )
@@ -70,7 +73,6 @@ otherwise.
         dependencies={"python": ">=3.10", "numpy": "*"},
         pypi_dependencies={"pandas": ">=2.0"},
         channels=["conda-forge"],
-        platforms=["linux-64", "osx-arm64"],
         env_cache_path="/var/cache/pixi-airflow",
         python_callable="mymodule:report",
     )
@@ -78,6 +80,62 @@ otherwise.
 
 Both paths are templated, so they can come from params or Variables, for example
 `pixi_project_path="{{ params.project }}"`.
+
+### Relative paths
+
+A relative `pixi_project_path`, `pixi_toml_path` or `env_cache_path` is relative to the directory of
+the DAG file, not to the worker's working directory. A project kept next to the DAG in the DAG
+bundle can be referenced like this:
+
+```text
+dags/
+├── training.py
+└── training-env/
+    ├── pixi.toml
+    └── pixi.lock
+```
+
+```python
+PixiOperator(
+    task_id="train",
+    pixi_project_path="training-env",
+    lock_mode="frozen",
+    python_callable="train:main",
+)
+```
+
+The path is resolved when the task runs, after templates are rendered, so it points at the DAG file's
+location on that worker. A task without a DAG resolves it against the working directory. Absolute
+paths are used as they are. This applies to the operators that run pixi on the worker: this one,
+the [Bash operator](bash.md) and the [sensor](../sensors/pixi.md). For the
+[Kubernetes pod operator](kubernetes.md), paths are paths in the pod.
+
+### The lock file
+
+`pixi run` keeps `pixi.lock` up to date with the manifest: if the manifest changed since the lock file
+was written, or there is no lock file, plain `pixi run` solves the environment again and writes a new
+`pixi.lock` before running. A run can then get different package versions than the ones you tested,
+and it needs write access to the project directory.
+
+`lock_mode` changes that, for `pixi_project_path` and `pixi_toml_path`:
+
+| `lock_mode` | Flag | Behaviour |
+|---|---|---|
+| `None` (default) | | Solves again and updates `pixi.lock` when it is out of date. |
+| `"locked"` | `--locked` | Installs from `pixi.lock`; fails if it is out of date with the manifest. |
+| `"frozen"` | `--frozen` | Installs from `pixi.lock` as it is, without checking it against the manifest. |
+
+Use `"locked"` to run exactly what the lock file pins, and to fail when someone changed the manifest
+without locking again. Use `"frozen"` to run what the lock file pins even if the manifest no longer
+matches it. Neither rewrites `pixi.lock`. Pixi still installs the environment into the project's
+`.pixi` directory unless it is already installed there, so a project the worker cannot write to, such
+as one baked into an image, needs the environment installed when the image is built, or Pixi's
+`detached-environments` setting.
+
+`lock_mode` is templated, and also accepts an empty string for the default. An inline manifest has no
+lock file, so it rejects `lock_mode`. The `PIXI_LOCKED` and `PIXI_FROZEN` environment variables of
+[`pixi run`](https://pixi.sh/latest/reference/cli/pixi/run/), set on the worker or in `env_vars`, have
+the same effect as the flags.
 
 ### Inline manifest options
 
@@ -87,14 +145,50 @@ The inline options have the same structure as the
 | Parameter | Manifest section | Default |
 |---|---|---|
 | `channels` | `[workspace] channels` | `["conda-forge"]` |
-| `platforms` | `[workspace] platforms` | `linux-64`, `osx-64`, `osx-arm64`, `win-64` |
+| `platforms` | `[workspace] platforms` | the platform of the machine that runs pixi, such as `linux-64` |
 | `workspace_name` | `[workspace] name` | |
 | `dependencies` | `[dependencies]`, as a dict or a list of MatchSpecs | |
 | `pypi_dependencies` | `[pypi-dependencies]` | |
 | `requirements` | `[pypi-dependencies]`, from pip requirement strings | |
 | `pypi_options` | `[pypi-options]` | |
-| `feature` | `[feature.<name>]`: a dict of features with `channels`, `platforms`, `dependencies` and `pypi_dependencies` | |
+| `feature` | `[feature.<name>]`: a dict of features, each a table as in `pixi.toml`; `dependencies` may be a list of MatchSpecs, and `pypi_dependencies` stands for `pypi-dependencies` | |
 | `environments` | `[environments]` | |
+
+Keys inside these dicts are written as `pixi.toml` spells them, with hyphens: `pypi_options={"index-url": ...}`,
+`environments={"cuda": {"features": ["cuda"], "solve-group": "default"}}`.
+
+### Manifest validation
+
+An inline manifest is checked against Pixi's
+[manifest schema](https://pixi.sh/latest/reference/pixi_manifest/) for pixi 0.81.0, the oldest version
+the provider supports. A misspelled key or a value of the wrong type raises `ValueError` when the DAG
+is parsed, so it shows up as an import error instead of a failed solve on the worker:
+
+```python
+PixiOperator(
+    task_id="report",
+    dependencies={"python": "3.12.*"},
+    pypi_options={"index_url": "https://pypi.example/simple"},  # should be "index-url"
+    python_callable="mymodule:report",
+)
+```
+
+```text
+ValueError: invalid inline pixi manifest at pypi-options: Additional properties are not allowed
+('index_url' was unexpected). The manifest follows the schema of pixi 0.81.0; pass
+validate_manifest=False for keys only a newer pixi on the workers knows
+```
+
+The message names the place as a TOML key, such as `environments.gpu` or `dependencies."ruamel.yaml"`,
+and what is wrong there. It leaves out the value itself, since an index URL can hold a password.
+
+`requirements` and the default platforms are added when the task runs, after templates are rendered,
+and the whole manifest is checked again then. Manifests from `pixi_project_path` or `pixi_toml_path`
+are not checked; pixi reads them as they are.
+
+If the workers run a newer pixi and the manifest uses a key that pixi 0.81.0 doesn't know, pass
+`validate_manifest=False`. The manifest is then written as given, and pixi reports any mistakes when it
+solves the environment.
 
 ### Pip requirements
 
@@ -115,9 +209,28 @@ are not: use `pypi_options` for indexes. If an inline manifest has PyPI packages
 dependency, it gets the worker's Python version, as a virtualenv would. `requirements` can't extend a
 project or manifest file; add the packages to that manifest instead.
 
-!!! tip
-    Pixi solves an environment for every listed platform. Restricting `platforms` to the ones your
-    workers run on makes the first run of a new manifest faster.
+### Platforms
+
+Pixi solves an inline environment for every platform in `platforms`, and the solve fails if a
+package is missing on any of them. By default the manifest lists only the platform of the worker
+that runs the task: `linux-64`, `linux-aarch64`, `osx-64`, `osx-arm64` or `win-64`. Other machines
+fail with an error that asks for `platforms`.
+
+Pass `platforms` to list them yourself, for example to share an `env_cache_path` between workers of
+different architectures:
+
+```python
+PixiOperator(
+    task_id="align",
+    dependencies={"bwa": "*", "samtools": "*"},
+    channels=["conda-forge", "bioconda"],
+    platforms=["linux-64", "linux-aarch64"],
+    python_callable="align:run",
+)
+```
+
+Every platform listed must have all packages: many bioconda packages, for example, have no `win-64`
+build.
 
 ### Reusing inline environments
 
@@ -160,17 +273,59 @@ Arguments and the return value cross into and out of the environment with the `s
 
 A callable that exits without returning, for example through `sys.exit()`, fails the task.
 
+## Airflow context
+
+As with `@task.virtualenv`, a parameter named after a context key gets the task's value, unless
+`op_args` or `op_kwargs` already set it:
+
+```python
+def export(table: str, ds: str, params: dict, run_id: str) -> str:
+    return f"{table}/{ds}/{run_id}: {params['rows']} rows"
+
+
+PixiOperator(
+    task_id="export",
+    pixi_project_path="/path/to/project",
+    python_callable=export,
+    op_args=["sales"],  # ds, params and run_id come from the context
+)
+```
+
+A function with `**kwargs` gets every key in the table below. This also works for a
+`"module.path:callable_name"` string, because the parameters are matched inside the environment. With
+`@task.pixi`, give the parameters a default (`ds=None`), as for any TaskFlow function.
+
+The environment may not have Airflow installed, so only plain JSON values cross into it:
+
+| Key | Value |
+|---|---|
+| `run_id`, `dag_id`, `task_id` | strings |
+| `map_index`, `try_number` | integers; `map_index` is `-1` for a task that is not mapped |
+| `ds`, `ds_nodash`, `ts`, `ts_nodash`, `ts_nodash_with_tz`, `task_instance_key_str` | strings, as in templates |
+| `logical_date`, `data_interval_start`, `data_interval_end` | ISO 8601 strings, such as `"2026-01-02T00:00:00+00:00"`, or `None` |
+| `prev_data_interval_start_success`, `prev_data_interval_end_success`, `prev_start_date_success`, `prev_end_date_success` | ISO 8601 strings or `None` |
+| `params` | a dict of the params' values |
+| `conf` | a dict: the DAG run's `conf`, as passed to `airflow dags trigger --conf` |
+| `test_mode`, `expanded_ti_count`, `task_reschedule_count`, `partition_key`, `partition_date` | when Airflow sets them |
+
+Keys the context doesn't have are left out, as are values JSON cannot hold, such as an object inside
+`params`. Unlike `@task.virtualenv`, dates arrive as ISO strings rather than pendulum `DateTime`s, even
+with the `pickle` serializer; parse them with `datetime.fromisoformat`. Objects such as `ti`, `dag_run`,
+`macros` and `var` never cross into the environment, so `ti=None` keeps its default. Pass what you need
+from them through `op_kwargs` templates instead, for example `op_kwargs={"start": "{{ dag_run.start_date }}"}`.
+
 ## How it works
 
 At run time the operator runs
 
 ```text
-pixi run --manifest-path <manifest> [--environment <env>] python -c <runner> <serializer> <input> <output>
+pixi run --manifest-path <manifest> [--environment <env>] [--locked | --frozen] \
+    python -c <runner> <serializer> <input> <output>
 ```
 
-with the manifest's directory as working directory. The runner reads the callable and its
-arguments from the input file, calls it, and writes the return value to the output file, so stdout
-and stderr stay free for the task log.
+with the manifest's directory as working directory. The runner reads the callable, its arguments
+and the [context](#airflow-context) from the input file, calls it, and writes the return value to
+the output file, so stdout and stderr stay free for the task log.
 
 ```mermaid
 sequenceDiagram
@@ -201,15 +356,125 @@ PixiOperator(
 
 `env_vars` is not templated, so secrets passed here are never rendered into the UI.
 
-## Logs, timeouts and killing
+### From Variables and Connections
+
+`env_from_variables` and `env_from_connections` set environment variables from
+[Airflow Variables](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/variables.html)
+and [Connections](https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html), read on
+the worker when the task runs:
+
+```python
+PixiOperator(
+    task_id="load",
+    pixi_project_path="/path/to/project",
+    python_callable="loader:main",
+    env_from_variables={"API_URL": "api_url"},
+    env_from_connections={
+        "DATABASE_URL": "warehouse",  # the connection's URI
+        "DB_PASSWORD": "warehouse.password",
+        "DB_SSLMODE": "warehouse.extra.sslmode",
+    },
+)
+```
+
+Each maps an environment variable name to a Variable key, or to one of these:
+
+| Value | Environment variable |
+|---|---|
+| `"conn_id"` | the connection's URI, as `Connection.get_uri()` returns it |
+| `"conn_id.host"`, `.login`, `.password`, `.schema`, `.port` | that field |
+| `"conn_id.extra"` | the extra, as a JSON string |
+| `"conn_id.extra.<key>"` | one key of the extra; a value that is not a string becomes JSON |
+
+The first `.host`, `.login`, `.password`, `.schema`, `.port` or `.extra` in the value names the field,
+so `"my.db.password"` is the password of the connection `my.db`. Only `extra` has keys: a value such
+as `"warehouse.port.internal"` is rejected when the DAG is parsed.
+
+A missing Variable, connection or field fails the task before pixi starts, with an error that names it.
+Passwords, URIs and extras are masked in the task log; Variables are masked as Airflow masks them, when
+their key contains a sensitive word such as `password` or `secret`. Neither argument is templated, and the
+values are never rendered as templates. Both can be set for every task through `default_args`.
+
+When several sources set the same variable, the later one in this list wins:
+
+1. the worker's environment,
+2. the cache directory Variables (see [Cache directories](#cache-directories)),
+3. `env_from_variables` and `env_from_connections` (a name may appear in only one of them),
+4. `env_vars`.
+
+## Private channels and indexes
+
+`pixi_conn_id` names one or several connections of type `pixi`, with a token or a username and
+password for a private conda channel or PyPI index:
+
+```python
+PixiOperator(
+    task_id="train",
+    pixi_project_path="/path/to/project",
+    lock_mode="locked",
+    python_callable="train:main",
+    pixi_conn_id=["prefix_dev", "artifactory"],
+)
+```
+
+For the run, the operator writes the credentials to a temporary file that `RATTLER_AUTH_FILE` points
+at, as [pixi's authentication](https://pixi.sh/latest/deployment/authentication/) expects, and removes
+it afterwards. See [Pixi connection](../connections/pixi.md) for the fields and auth types.
+
+## Errors, skipping and timeouts
 
 Everything the run prints, pixi's own messages included, is streamed to the task log as it
-happens. When pixi exits with a non-zero code, the task fails with the last lines of output in the
-error message.
+happens.
+
+When the callable raises an exception, its traceback is printed to the task log and the task fails
+with [`PixiCallableError`][airflow.providers.pixi.exceptions.PixiCallableError], whose message names the
+function and the exception:
+
+```text
+airflow.providers.pixi.exceptions.PixiCallableError: train raised ValueError: no rows for 2026-01-01
+```
+
+The exception also has `callable_name`, `error_type`, `error_message` and `traceback` attributes, for
+`on_failure_callback`. A `"module.path:callable_name"` that cannot be imported fails the same way, with
+`ModuleNotFoundError` or `AttributeError`.
+
+When pixi fails before the callable runs, for example because the environment cannot be solved or
+installed, the task fails with pixi's exit code and the last lines of output:
+
+```text
+AirflowException: pixi run exited with code 1:
+...
+```
+
+`skip_on_exit_code` skips the task instead, as for `PythonVirtualenvOperator`. It takes an exit code
+or a list of them, and the callable chooses one with `sys.exit`:
+
+```python
+def export(day: str) -> None:
+    import sys
+
+    if not has_data(day):
+        sys.exit(99)  # nothing to export: skip the task
+    ...
+
+
+PixiOperator(
+    task_id="export",
+    pixi_project_path="/path/to/project",
+    python_callable=export,
+    op_args=["{{ ds }}"],
+    skip_on_exit_code=99,
+)
+```
+
+Pick a code other than 1: an uncaught exception exits with 1, and so does pixi when it cannot prepare
+the environment. With `0` in the list, the task is skipped after the callable returns.
 
 There is no built-in time limit: set Airflow's `execution_timeout`. When it expires, or the task is
 killed, the operator stops pixi and every process it started (`SIGTERM`, then `SIGKILL` after
-10 seconds).
+10 seconds). That includes processes still running after pixi has exited, such as one the callable
+started in the background without waiting for it; they get `SIGKILL` at once. Such a process keeps the
+run's output open, so the task waits for it until it exits or the timeout expires.
 
 ## Pixi binary
 
@@ -250,17 +515,19 @@ with DAG(
 ```
 
 The Variables are read when the task runs. A missing Variable leaves the environment variable
-unset, so the tool's default applies.
+unset, so the tool's default applies. To share caches between workers, see the
+[deployment guide](../deployment.md#shared-caches).
 
 ## Templated fields
 
-`op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `requirements`,
-`pixi_cache_dir_variable`, `uv_cache_dir_variable` and `pip_cache_dir_variable`.
+`op_args`, `op_kwargs`, `pixi_project_path`, `pixi_toml_path`, `environment`, `lock_mode`,
+`requirements`, `pixi_cache_dir_variable`, `uv_cache_dir_variable` and `pip_cache_dir_variable`.
+`env_vars`, `env_from_variables`, `env_from_connections` and `pixi_conn_id` are not templated.
 
-The environment arguments of this page (`pixi_project_path`, `pixi_toml_path`, `environment`, the
-inline manifest options, `env_cache_path` and `pixi_binary`) work the same way for the
-[Bash operator](bash.md), the [Kubernetes pod operator](kubernetes.md) and the
-[sensor](../sensors/pixi.md).
+The environment arguments of this page (`pixi_project_path`, `pixi_toml_path`, `environment`,
+`lock_mode`, the inline manifest options, `env_cache_path` and `pixi_binary`) work the same way for the
+[Bash operator](bash.md), the [Task operator](task.md), the [Kubernetes pod operator](kubernetes.md) and
+the [sensor](../sensors/pixi.md).
 
 ## Reference
 

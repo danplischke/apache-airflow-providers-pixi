@@ -29,7 +29,9 @@ PixiSensor(
 
 It accepts every [Pixi Operator](../operators/pixi.md) argument for the callable and the environment,
 and every `BaseSensorOperator` argument (`poke_interval`, `timeout`, `mode`, `soft_fail`,
-`exponential_backoff`, ...).
+`exponential_backoff`, ...). As for the operator, parameters named after context keys such as `ds` or
+`params` get their values ([Airflow context](../operators/pixi.md#airflow-context)), and
+`env_from_variables`, `env_from_connections` and `pixi_conn_id` are read again on each poke.
 
 ## Returning an XCom
 
@@ -47,11 +49,20 @@ def newest_file(prefix: str) -> dict:
 A dict with only the keys `is_done` and `xcom_value` is read that way; any other return value is
 checked for truthiness.
 
+## Errors
+
+An exception raised by the callable fails the sensor with
+[`PixiCallableError`][airflow.providers.pixi.exceptions.PixiCallableError], as for the
+[operator](../operators/pixi.md#errors-skipping-and-timeouts). As for any sensor, `soft_fail` does not
+apply to exceptions from a poke: `silent_fail=True` logs them and pokes again, and `never_fail=True`
+skips the sensor. To skip it from inside the callable, exit with a code listed in `skip_on_exit_code`.
+
 ## Poke and reschedule mode
 
 In `mode="poke"`, the default, the environment is prepared once and every poke of the run uses it. In
 `mode="reschedule"` each poke is a new task try, so an inline environment would be built again for
-each one: pass `env_cache_path` to keep it between pokes.
+each one: pass `env_cache_path` to keep it between pokes. A relative `env_cache_path` or project path is
+relative to the DAG file.
 
 ## `@task.pixi_sensor`
 

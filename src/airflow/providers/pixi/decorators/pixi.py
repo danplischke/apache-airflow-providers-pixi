@@ -17,6 +17,7 @@ class PixiDecoratedOperator(DecoratedOperator, PixiOperator):  # type: ignore[mi
     # PixiOperator's, which include DecoratedOperator's op_args and op_kwargs
     template_fields = PixiOperator.template_fields
     template_fields_renderers = PixiOperator.template_fields_renderers
+    get_python_source = PixiOperator.get_python_source
 
     def __init__(
         self,

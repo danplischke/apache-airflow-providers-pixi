@@ -15,7 +15,7 @@ written for `@task.virtualenv` usually works on `@task.pixi` unchanged.
 | `env_vars` | Environment variables for the run. Not templated, so secrets set here are never rendered into the UI. |
 | `requirements` | Pip requirement strings added to an inline manifest's `[pypi-dependencies]`. |
 | [`inline_manifest`][airflow.providers.pixi.operators.pixi.BasePixiOperator.inline_manifest] | Whether `requirements` can extend the environment. A project or manifest file has to bring the packages itself. |
-| `custom_operator_name` | `@task.<name>` of your decorator. That decorator line is removed from the shipped source, like `@task.pixi`. |
+| `custom_operator_name` | `@task.<name>` of your decorator. That decorator line is removed from the shipped source, like `@task.pixi`. A DAG that uses your factory function by its own name instead, as `@tracked_pixi_task(...)`, keeps that line in the source, which then fails in the environment with a `NameError`. Only this provider's functions (`pixi_task`, `pixi_kubernetes_task`, `pixi_sensor_task`, `pixi_branch_task`, `pixi_short_circuit_task`) are also removed by name. |
 
 Set `op_kwargs`, `env_vars` and `requirements` in `execute` before calling `super().execute`.
 
