@@ -17,8 +17,32 @@ env:
   PYTHON_VERSION_DEFAULT: "3.14"
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+
+      - name: Match changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then echo "docs=true" | tee -a "$GITHUB_OUTPUT"; exit 0; fi
+          # src/ feeds the API reference; the example DAGs are included as snippets
+          pattern='^(docs/|zensical\.toml$|src/|tests/system/pixi/example_|pyproject\.toml$|uv\.lock$|\.github/workflows/docs\.yml$)'
+          git diff --name-only HEAD^1 HEAD | grep -qE "$pattern" && docs=true || docs=false
+          echo "docs=$docs" | tee -a "$GITHUB_OUTPUT"
+
   build:
     name: Build documentation
+    needs: [changes]
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1

@@ -12,8 +12,37 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      actions: ${{ steps.filter.outputs.actions }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+
+      - name: Match changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            files=$(git diff --name-only HEAD^1 HEAD)
+            match() { printf '%s\n' "$files" | grep -qE "$1" && echo true || echo false; }
+          else
+            match() { echo true; }
+          fi
+          {
+            echo "python=$(match '\.py$|^\.github/workflows/codeql\.yml$')"
+            echo "actions=$(match '^\.github/(workflows|actions)/')"
+          } | tee -a "$GITHUB_OUTPUT"
+
   analyze:
     name: Analyze (${{ matrix.language }})
+    needs: [changes]
     runs-on: ubuntu-latest
     permissions:
       # CodeQL reads its own workflow run, which needs this in a private repository.
@@ -25,15 +54,19 @@ jobs:
       matrix:
         language: [python, actions]
     steps:
+      # step-level conditions, because a skipped matrix job wouldn't report its required check name
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
+        if: needs.changes.outputs[matrix.language] == 'true'
 
       - name: Initialize CodeQL
+        if: needs.changes.outputs[matrix.language] == 'true'
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2 — https://github.com/github/codeql-action/releases/tag/v4.38.2
         with:
           languages: ${{ matrix.language }}
           build-mode: none
 
       - name: Perform CodeQL Analysis
+        if: needs.changes.outputs[matrix.language] == 'true'
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2 — https://github.com/github/codeql-action/releases/tag/v4.38.2
         with:
           category: "/language:${{ matrix.language }}"

@@ -3,8 +3,8 @@ name: QA Check
 on:
   push:
     branches: [main]
-  # No paths filter: these jobs are required status checks on main, and a
-  # filtered-out PR would wait on them forever.
+  # No paths filter: "QA result" is a required check, so the workflow must run on every PR.
+  # The changes job skips what a PR doesn't touch instead.
   pull_request:
   workflow_dispatch:
   workflow_call:
@@ -20,8 +20,51 @@ env:
   PYTHON_VERSION_DEFAULT: "3.14"
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      lint: ${{ steps.filter.outputs.lint }}
+      unit: ${{ steps.filter.outputs.unit }}
+      compat: ${{ steps.filter.outputs.compat }}
+      smoke: ${{ steps.filter.outputs.smoke }}
+      integration: ${{ steps.filter.outputs.integration }}
+      system: ${{ steps.filter.outputs.system }}
+      package: ${{ steps.filter.outputs.package }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          # the PR's merge commit and its first parent, the base branch
+          fetch-depth: 2
+
+      - name: Match changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            files=$(git diff --name-only HEAD^1 HEAD)
+            printf 'Changed files:\n%s\n' "$files"
+            match() { printf '%s\n' "$files" | grep -qE "$1" && echo true || echo false; }
+          else
+            match() { echo true; }
+          fi
+          src='^(src/|pyproject\.toml$|uv\.lock$|provider\.yaml$|\.github/workflows/qa\.yml$)'
+          {
+            echo "lint=$(match "$src|^(tests|dev)/.*\.py$")"
+            echo "unit=$(match "$src|^tests/(unit/|conftest\.py$)")"
+            echo "compat=$(match "$src|^tests/")"
+            echo "smoke=$(match "$src|^dev/smoke\.py$")"
+            echo "integration=$(match "$src|^tests/(integration/|conftest\.py$)")"
+            echo "system=$(match "$src|^tests/(system/|conftest\.py$)")"
+            echo "package=$(match "$src|^(tests/|dev/dags/|docs/changelog\.md$|README\.md$|LICENSE$)")"
+          } | tee -a "$GITHUB_OUTPUT"
+
   lint:
     name: Lint & Format Check
+    needs: [changes]
+    if: needs.changes.outputs.lint == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
@@ -48,6 +91,8 @@ jobs:
 
   test:
     name: Test Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    needs: [changes]
+    if: needs.changes.outputs.unit == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -88,6 +133,8 @@ jobs:
 
   compat:
     name: Airflow ${{ matrix.airflow-version }} (official constraints)
+    needs: [changes]
+    if: needs.changes.outputs.compat == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -123,6 +170,8 @@ jobs:
 
   lowest-direct:
     name: Lowest direct dependencies (Python 3.10)
+    needs: [changes]
+    if: needs.changes.outputs.unit == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
@@ -146,6 +195,8 @@ jobs:
 
   smoke-test:
     name: Smoke Test (base install)
+    needs: [changes]
+    if: needs.changes.outputs.smoke == 'true'
     runs-on: ubuntu-latest
     # Airflow validates get_provider_info whenever it is imported; an invalid
     # one breaks `import airflow` for every installation that has this package.
@@ -168,6 +219,8 @@ jobs:
 
   integration-test:
     name: Integration Test (pixi ${{ matrix.pixi-version }})
+    needs: [changes]
+    if: needs.changes.outputs.integration == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -202,6 +255,8 @@ jobs:
 
   system-test:
     name: System Test (Airflow dag.test)
+    needs: [changes]
+    if: needs.changes.outputs.system == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
@@ -242,6 +297,8 @@ jobs:
 
   package:
     name: Build & Check Package
+    needs: [changes]
+    if: needs.changes.outputs.package == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
@@ -264,3 +321,17 @@ jobs:
         run: |
           pip install 'twine>=7.0.0'
           twine check dist/*
+
+  # The required check: skipped jobs pass, failed or cancelled ones fail it.
+  result:
+    name: QA result
+    needs: [changes, lint, test, compat, lowest-direct, smoke-test, integration-test, system-test, package]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the job results
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -qE '"(failure|cancelled)"'; then exit 1; fi
