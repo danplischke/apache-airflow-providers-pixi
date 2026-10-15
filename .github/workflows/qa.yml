@@ -75,7 +75,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.0
 
       - name: Install dependencies
         run: uv sync --locked --group dev
@@ -115,7 +115,7 @@ jobs:
           allow-prereleases: true
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.0
 
       - name: Install dependencies
         run: uv sync --locked --group dev --python ${{ matrix.python-version }}
@@ -149,7 +149,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.0
 
       - name: Install Airflow with its constraints
         env:
@@ -182,7 +182,7 @@ jobs:
           python-version: "3.10"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.0
 
       - name: Install the lowest allowed versions
         run: uv sync --resolution lowest-direct --group dev --python 3.10
@@ -209,7 +209,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.0
 
       - name: Install the base package only
         run: uv sync --locked --no-default-groups
@@ -235,7 +235,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.0
 
       - name: Install dependencies
         run: uv sync --locked --group dev
@@ -265,7 +265,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.0
 
       - name: Install dependencies
         run: uv sync --locked --group dev
@@ -307,7 +307,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.0
 
       - name: Build package
         run: uv build
