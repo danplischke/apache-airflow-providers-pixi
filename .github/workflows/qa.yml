@@ -70,12 +70,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0 — https://github.com/actions/setup-python/releases/tag/v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.2
 
       - name: Install dependencies
         run: uv sync --locked --group dev
@@ -109,13 +109,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0 — https://github.com/actions/setup-python/releases/tag/v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.2
 
       - name: Install dependencies
         run: uv sync --locked --group dev --python ${{ matrix.python-version }}
@@ -144,12 +144,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0 — https://github.com/actions/setup-python/releases/tag/v7.1.0
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.2
 
       - name: Install Airflow with its constraints
         env:
@@ -177,12 +177,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0 — https://github.com/actions/setup-python/releases/tag/v7.1.0
         with:
           python-version: "3.10"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.2
 
       - name: Install the lowest allowed versions
         run: uv sync --resolution lowest-direct --group dev --python 3.10
@@ -204,12 +204,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0 — https://github.com/actions/setup-python/releases/tag/v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.2
 
       - name: Install the base package only
         run: uv sync --locked --no-default-groups
@@ -230,18 +230,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0 — https://github.com/actions/setup-python/releases/tag/v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.2
 
       - name: Install dependencies
         run: uv sync --locked --group dev
 
       - name: Install pixi
-        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0 — https://github.com/prefix-dev/setup-pixi/releases/tag/v0.11.0
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2 — https://github.com/prefix-dev/setup-pixi/releases/tag/v0.11.2
         with:
           pixi-version: ${{ matrix.pixi-version }}
           run-install: false
@@ -260,18 +260,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 — https://github.com/actions/checkout/releases/tag/v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0 — https://github.com/actions/setup-python/releases/tag/v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.2
 
       - name: Install dependencies
         run: uv sync --locked --group dev
 
       - name: Install pixi
-        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0 — https://github.com/prefix-dev/setup-pixi/releases/tag/v0.11.0
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2 — https://github.com/prefix-dev/setup-pixi/releases/tag/v0.11.2
         with:
           pixi-version: v0.81.0
           run-install: false
@@ -302,12 +302,12 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0 — https://github.com/actions/setup-python/releases/tag/v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0 — https://github.com/actions/setup-python/releases/tag/v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 — https://github.com/astral-sh/setup-uv/releases/tag/v10.2.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 — https://github.com/astral-sh/setup-uv/releases/tag/v10.3.2
 
       - name: Build package
         run: uv build
